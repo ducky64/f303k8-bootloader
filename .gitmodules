@@ -1,0 +1,6 @@
+[submodule "mbed"]
+	path = mbed
+	url = git@github.com:mbedmicro/mbed.git
+[submodule "mbed-scons"]
+	path = mbed-scons
+	url = git@github.com:ducky64/mbed-scons.git
