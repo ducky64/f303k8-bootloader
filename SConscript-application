@@ -1,0 +1,31 @@
+Import('env')
+
+env = env.Clone()
+env.Append(CCFLAGS = ['-w'])
+mbed_lib = env.MbedLikeLibrary(
+    'mbed', 'mbed/hal/',
+    ['api/', 'common/', 'hal/', 'targets/cmsis/', 'targets/hal/'],
+    ignore_sources=[
+      'targets/cmsis/TARGET_STM/TARGET_STM32F3/TARGET_NUCLEO_F303K8/cmsis_nvic.c',
+    ],
+    additional_sources=[
+      'mbed-overrides/stm32f303k8-application/cmsis_nvic.c'
+    ])
+env.Prepend(LIBS = mbed_lib)
+
+env.Append(LINKFLAGS=[
+  '-Wl,--whole-archive',  # used to compile mbed HAL, which uses funky weak symbols
+  mbed_lib,
+  '-Wl,--no-whole-archive',
+  '--specs=nosys.specs',
+  '-Tmbed-overrides/stm32f303k8-application/STM32F303X8.ld',
+])
+
+# Top-level build flow
+application = env.Program(
+  target = 'application',
+  source = Glob('application/*.cpp'),
+)
+env.Objcopy(application)
+env.Objdump(application)
+env.SymbolsSize(application)
