@@ -33,6 +33,8 @@ env.Append(CCFLAGS = '-Os')
 SConscript('mbed-scons/targets/SConscript-mbed-env-stm32f303k8', exports='env',
            duplicate=0)
 
+env.Append(CXXFLAGS = '-std=c++11')  # Live on the bleeding edge, override the mbed default
+
 ###
 ### Actual build targets here
 ###

@@ -39,7 +39,7 @@ public:
 
   /**
    * Returns the size, in bytes, of a erase sector. Will return a power of two.
-   * erase() will be guaranteed to complete when the size is exactly this.
+   * erase() will be guaranteed to complete when the size is a multiple of this.
    */
   virtual size_t get_erase_size() = 0;
 
@@ -51,7 +51,7 @@ public:
   /**
    * Erase a page in flash.
    *
-   * length must be equal to get_erase_size().
+   * length must be a multiple of get_erase_size().
    *
    * Returns zero when successful, otherwise an error code.
    */
@@ -60,18 +60,19 @@ public:
   /**
    * Writes the data to the specified start address.
    *
-   * length must be equal to get_write_size().
+   * length must be a multiple of get_write_size().
    *
    * Returns zero when successful, otherwise an error code.
    */
-  virtual uint8_t wrte(void* start_addr, void* data, size_t length) = 0;
+  virtual uint8_t write(void* start_addr, void* data, size_t length) = 0;
 };
 
 class F303K8ISP : public ISPBase {
 protected:
   const size_t FLASH_START = 0x8000000;
-  const size_t FLASH_END = 0x807ffff;
+  const size_t FLASH_END = 0x800ffff;
   const size_t ERASE_SIZE = 2048;
+  const size_t WRITE_SIZE = 2l;
 
 public:
   bool isp_begin() {
@@ -95,27 +96,47 @@ public:
   }
 
   size_t get_write_size() {
-    return 2;
+    return WRITE_SIZE;
   }
 
   uint8_t erase(void* start_addr, size_t length) {
-    size_t addr = (uint32_t)start_addr;
-    if (addr % ERASE_SIZE != 0) {
+    if (length % ERASE_SIZE != 0) {
       return 255;
     }
-    if (!(addr >= FLASH_START && addr <= FLASH_END)) {
+    size_t addr = (uint32_t)start_addr;
+    if (addr % ERASE_SIZE != 0) {
       return 254;
     }
-    if (length != ERASE_SIZE) {
+    if (!(addr >= FLASH_START && addr <= FLASH_END)) {
       return 253;
     }
-    size_t page = (addr - FLASH_START) / ERASE_SIZE;
-    FLASH_PageErase(page);
-    return FLASH_WaitForLastOperation(HAL_MAX_DELAY);
+
+    size_t page = addr - FLASH_START;
+    size_t page_end = page + length;
+    while (page < page_end) {
+      FLASH_PageErase(page);
+      HAL_StatusTypeDef status = FLASH_WaitForLastOperation(HAL_MAX_DELAY);
+      static_assert(HAL_OK == 0, "HAL_OK must be zero");
+      if (status != HAL_OK) {
+        return status;
+      }
+      page += ERASE_SIZE;
+    }
+    return 0;
   }
 
   uint8_t write(void* start_addr, void* data, size_t length) {
-    return 255;
+    if (length % WRITE_SIZE != 0) {
+      return 255;
+    }
+    size_t addr = (uint32_t)start_addr;
+    if (addr % WRITE_SIZE != 0) {
+      return 254;
+    }
+    if (!(addr >= FLASH_START && addr <= FLASH_END)) {
+      return 253;
+    }
+
   }
 };
 
@@ -139,7 +160,7 @@ int main() {
       isp.isp_begin());
 
   uart.printf("Bootloader erase: %i\r\n",
-      isp.erase(BL_BEGIN_PTR, 2048));
+      isp.erase(BL_BEGIN_PTR + 16384, 16384));
 
   I2C i2c(D4, D5);
 
