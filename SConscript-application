@@ -23,7 +23,7 @@ env.Append(LINKFLAGS=[
 
 # Top-level build flow
 application = env.Program(
-  target = 'application',
+  target = '../application',
   source = Glob('application/*.cpp'),
 )
 env.Objcopy(application)

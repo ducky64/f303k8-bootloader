@@ -17,7 +17,7 @@ env.Append(LINKFLAGS=[
 
 # Top-level build flow
 bootloader = env.Program(
-  target = 'bootloader',
+  target = '../bootloader',
   source = Glob('*.cpp'),
 )
 env.Objcopy(bootloader)
