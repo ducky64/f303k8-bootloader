@@ -40,3 +40,26 @@ SConscript('SConscript-bootloader', variant_dir='build/bootloader',
            duplicate=0)
 SConscript('SConscript-application', variant_dir='build/application',
            duplicate=0)
+
+# From https://stackoverflow.com/questions/1094841/reusable-library-to-get-human-readable-version-of-file-size
+def sizeof_fmt(num, suffix='B'):
+    for unit in ['','Ki','Mi','Gi','Ti','Pi','Ei','Zi']:
+        if abs(num) < 1024.0:
+            return "%3.3f%s%s" % (num, unit, suffix)
+        num /= 1024.0
+    return "%.1f%s%s" % (num, 'Yi', suffix)
+
+def display_file_size(target, source, env):
+  for source in source:
+    name = source.path
+    if os.path.exists(source.abspath):
+      size = sizeof_fmt(os.path.getsize(source.abspath))
+    else:
+      size = "MISSING"
+    print("%s: %s" % (name, size))
+
+bootloader_size = Command('bootloader_size',
+                          [File('build/bootloader.bin'), File('build/application.bin')],
+                          display_file_size)
+Depends(bootloader_size, DEFAULT_TARGETS)
+Default(bootloader_size)
