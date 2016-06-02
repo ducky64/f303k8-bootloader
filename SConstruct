@@ -30,10 +30,13 @@ env['PROGSUFFIX'] = '.elf'
 ###
 env.Append(CCFLAGS = '-Os')
 
-SConscript('mbed-scons/targets/SConscript-mbed-env-stm32f303k8', exports='env')
+SConscript('mbed-scons/targets/SConscript-mbed-env-stm32f303k8', exports='env',
+           duplicate=0)
 
 ###
 ### Actual build targets here
 ###
-SConscript('SConscript-bootloader', variant_dir='build/bootloader')
-SConscript('SConscript-application', variant_dir='build/application')
+SConscript('SConscript-bootloader', variant_dir='build/bootloader',
+           duplicate=0)
+SConscript('SConscript-application', variant_dir='build/application',
+           duplicate=0)
