@@ -7,8 +7,10 @@
 
 #include "mbed.h"
 
-PwmOut led0(D11);
-PwmOut led1(D12);
+DigitalIn sw(D7);
+
+DigitalOut led0(D11);
+DigitalOut led1(D12);
 
 class ISPBase {
 public:
@@ -31,7 +33,7 @@ public:
    * Returns the low 32 bits of the part's serial number (if it has one) or zero
    * (if it doesn't).
    */
-  virtual uint32_t get_part_serial() = 0;
+  virtual uint32_t get_device_serial() = 0;
 
   /**
    * Returns the size, in bytes, of a erase sector. Will return a power of two.
@@ -77,7 +79,7 @@ public:
     return DBGMCU->IDCODE;
   }
 
-  uint32_t get_part_serial() {
+  uint32_t get_device_serial() {
     return 0;
   }
 
@@ -105,10 +107,14 @@ const void* APP_BEGIN_PTR = &_FlashEnd;
 int main() {
   F303K8ISP isp;
 
+  sw.mode(PullUp);
+
   Serial uart(SERIAL_TX, SERIAL_RX);
   uart.baud(115200);
   uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ ")\r\n");
 
+  uart.printf("Device ID: 0x% 8x, Device Serial: 0x% 8x\r\n",
+      isp.get_device_id(), isp.get_device_serial());
   uart.printf("Bootloader address range: 0x% 8x - 0x% 8x\r\n",
       (uint32_t)BL_BEGIN_PTR, (uint32_t)APP_BEGIN_PTR);
 
@@ -118,8 +124,7 @@ int main() {
   char rpc_inbuf[RPC_BUFSIZE], rpc_outbuf[RPC_BUFSIZE];
   char* rpc_inptr = rpc_inbuf;  // next received byte pointer
 
-  int step = 0;
-  bool dir = true;
+  uint8_t led = 0;
 
   while (1) {
     while (uart.readable()) {
@@ -139,22 +144,11 @@ int main() {
       }
     }
 
-    if (dir) {
-      step += 1;
-    } else {
-      step -= 1;
-    }
-    if (step == 128) {
-      dir = false;
-    } else if (step == 0) {
-      dir = true;
-    }
-    int inv_step = 128 - step;
+    led = !led;
+    led0 = led;
+    led1 = !led;
 
-    led0 = (step * step) / 16384.f;
-    led1 = (inv_step * inv_step) / 16384.f;
-
-    wait(0.01);
+    wait(0.25);
   }
   return 0;
 }
