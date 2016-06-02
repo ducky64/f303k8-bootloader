@@ -12,6 +12,8 @@ DigitalIn sw(D7);
 DigitalOut led0(D11);
 DigitalOut led1(D12);
 
+Serial uart(SERIAL_TX, SERIAL_RX);
+
 class ISPBase {
 public:
   /**
@@ -66,6 +68,11 @@ public:
 };
 
 class F303K8ISP : public ISPBase {
+protected:
+  const size_t FLASH_START = 0x8000000;
+  const size_t FLASH_END = 0x807ffff;
+  const size_t ERASE_SIZE = 2048;
+
 public:
   bool isp_begin() {
     return HAL_FLASH_Unlock() == HAL_OK;
@@ -84,7 +91,7 @@ public:
   }
 
   size_t get_erase_size() {
-    return 2048;
+    return ERASE_SIZE;
   }
 
   size_t get_write_size() {
@@ -92,24 +99,35 @@ public:
   }
 
   uint8_t erase(void* start_addr, size_t length) {
-    return 255;
+    size_t addr = (uint32_t)start_addr;
+    if (addr % ERASE_SIZE != 0) {
+      return 255;
+    }
+    if (!(addr >= FLASH_START && addr <= FLASH_END)) {
+      return 254;
+    }
+    if (length != ERASE_SIZE) {
+      return 253;
+    }
+    size_t page = (addr - FLASH_START) / ERASE_SIZE;
+    FLASH_PageErase(page);
+    return FLASH_WaitForLastOperation(HAL_MAX_DELAY);
   }
 
-  uint8_t wrte(void* start_addr, void* data, size_t length) {
+  uint8_t write(void* start_addr, void* data, size_t length) {
     return 255;
   }
 };
 
 extern char _FlashStart, _FlashEnd;
-const void* BL_BEGIN_PTR = &_FlashStart;
-const void* APP_BEGIN_PTR = &_FlashEnd;
+void* const BL_BEGIN_PTR = &_FlashStart;
+void* const APP_BEGIN_PTR = &_FlashEnd;
 
 int main() {
   F303K8ISP isp;
 
   sw.mode(PullUp);
 
-  Serial uart(SERIAL_TX, SERIAL_RX);
   uart.baud(115200);
   uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ ")\r\n");
 
@@ -117,6 +135,11 @@ int main() {
       isp.get_device_id(), isp.get_device_serial());
   uart.printf("Bootloader address range: 0x% 8x - 0x% 8x\r\n",
       (uint32_t)BL_BEGIN_PTR, (uint32_t)APP_BEGIN_PTR);
+  uart.printf("Bootloader unlock: %i\r\n",
+      isp.isp_begin());
+
+  uart.printf("Bootloader erase: %i\r\n",
+      isp.erase(BL_BEGIN_PTR, 2048));
 
   I2C i2c(D4, D5);
 
