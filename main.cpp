@@ -144,19 +144,15 @@ public:
     size_t addr_end = addr + length;
     while (addr < addr_end) {
       uint16_t data = ((*(uint8_t*)(data+0)) << 8) + ((*(uint8_t*)(data+1)) << 0);
-      FLASH_Program_HalfWord(addr, data);
+      HAL_StatusTypeDef status = HAL_FLASH_Program(TYPEPROGRAM_HALFWORD, addr, data);
 
-      HAL_StatusTypeDef status = FLASH_WaitForLastOperation(HAL_MAX_DELAY);
-      static_assert(HAL_OK == 0, "HAL_OK must be zero");
       if (status != HAL_OK) {
-        CLEAR_BIT(FLASH->CR, FLASH_CR_PG);
         return status;
       }
 
       addr += WRITE_SIZE;
       data += WRITE_SIZE;
     }
-    CLEAR_BIT(FLASH->CR, FLASH_CR_PG);
     return 0;
   }
 };
