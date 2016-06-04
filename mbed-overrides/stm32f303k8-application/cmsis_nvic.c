@@ -31,15 +31,21 @@
 #include "cmsis_nvic.h"
 
 #define NVIC_RAM_VECTOR_ADDRESS   (0x20000000)  // Vectors positioned at start of RAM
-#define NVIC_FLASH_VECTOR_ADDRESS (0x08008000)  // Initial vector position in flash + 32KiB offset for bootloader
+
+extern char _FlashStart;
+const uint32_t NVIC_FLASH_VECTOR_ADDRESS = (uint32_t)((void* const)&_FlashStart);
+// Because SCB->VTOR is set to the base of flash in SystemInit, also need to consider
+// that case, and have it load from offseted flash.
+const uint32_t NVIC_DEFAULT_ADDRESS = 0x08000000;
 
 void NVIC_SetVector(IRQn_Type IRQn, uint32_t vector) {
     uint32_t *vectors = (uint32_t *)SCB->VTOR;
     uint32_t i;
 
     // Copy and switch to dynamic vectors if the first time called
-    if (SCB->VTOR == NVIC_FLASH_VECTOR_ADDRESS) {
-        uint32_t *old_vectors = vectors;
+    if ((SCB->VTOR == NVIC_FLASH_VECTOR_ADDRESS)
+        || (SCB->VTOR == NVIC_DEFAULT_ADDRESS)) {
+        uint32_t *old_vectors = (uint32_t*)NVIC_FLASH_VECTOR_ADDRESS;
         vectors = (uint32_t*)NVIC_RAM_VECTOR_ADDRESS;
         for (i=0; i<NVIC_NUM_VECTORS; i++) {
             vectors[i] = old_vectors[i];

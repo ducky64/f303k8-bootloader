@@ -151,5 +151,9 @@ SECTIONS
 
     /* Check if data + heap + stack exceeds RAM limit */
     ASSERT(__StackLimit >= __HeapLimit, "region RAM overflowed with stack")
+
+    /* Make bootloader stuff consistent */
+    _FlashStart = ORIGIN(FLASH);
+    _FlashEnd = ORIGIN(FLASH) + LENGTH(FLASH);
 }
 
