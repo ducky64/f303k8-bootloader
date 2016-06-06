@@ -28,6 +28,20 @@ public:
     nextResetLength = pulseLengthMs;
   }
 
+  /**
+   * Sets the LED value at idle. Does not affect the current LED value if
+   * currently in a pulse.
+   */
+  void setIdlePolarity(bool inIdlePolarity) {
+    idleValue = inIdlePolarity;
+    if (!inPulse) {
+      led = idleValue;
+    }
+  }
+
+  /**
+   * Call this periodically to update the LED status.
+   */
   void update() {
     uint32_t currentTime = timer.read_ms();
 
