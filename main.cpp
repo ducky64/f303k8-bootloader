@@ -29,20 +29,27 @@ namespace BLPROTO {
 
   // CMD_PING
   // <- RESP_PING
+  // Global and addressed mode.
   const uint8_t CMD_PING = 0x02;
   const uint8_t RESP_PING = 0x06;
 
-  // CMD_SET_BOOTOUT
-  const uint8_t CMD_SET_BOOTOUT = 0x03;
-
   // CMD_SET_ADDRESS (uint8 newAddress)
+  // Global mode only. Sets the I2C address of the device.
   const uint8_t CMD_SET_ADDRESS = 0x04;
 
-  // CMD_WRITE_DATA (uint32 startAddress) (uint16 length) (uint32 CRC32-of-data)
+  // CMD_SET_BOOTOUT
+  // Sets the boot out pin high.
+  const uint8_t CMD_SET_BOOTOUT = 0x03;
+
+  // CMD_WRITE_DATA (uint32 startAddress) (uint16 length) (uint32 CRC32)
   //   length*(uint8 data)
+  // Writes data of length starting at the specified address.
+  // CRC32 is of the data only.
   const uint8_t CMD_WRITE_DATA = 0x06;
 
-  // CMD_JUMP (uint32 address)
+  // CMD_RUN (uint32 address)
+  // Runs the program beginning at the specified address. Not a simple jump,
+  // also sets up the initial PC, stack pointer, and vector table pointer.
   const uint8_t CMD_JUMP = 0x08;
 
   // CMD_LAST_STATUS
