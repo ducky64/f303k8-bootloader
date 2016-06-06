@@ -6,14 +6,13 @@
  */
 
 #include "mbed.h"
+#include "ActivityLED.h"
 #include "isp_f303k8.h"
 
 Serial uart(SERIAL_TX, SERIAL_RX);
 
-DigitalIn sw(D7);
-
-DigitalOut led0(D11);
-DigitalOut led1(D12);
+ActivityLED statusLED(LED1);
+const uint32_t LED_PULSE_TIME = 50;
 
 void dumpmem(Serial& serial, void* start_addr, size_t length, size_t bytes_per_line) {
   for (size_t maj=0; maj<length; maj+=bytes_per_line) {
@@ -102,8 +101,6 @@ uint8_t process_bootloader_command(ISPBase &isp, uint8_t* cmd, size_t length) {
 int main() {
   F303K8ISP isp;
 
-  sw.mode(PullUp);
-
   uart.baud(115200);
   uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ ")\r\n");
 
@@ -143,7 +140,9 @@ int main() {
           rpc_inptr = rpc_inbuf;  // reset the received byte pointer, discarding what we have
         }
       }
+      statusLED.pulse(LED_PULSE_TIME);
     }
+    statusLED.update();
   }
   return 0;
 }
