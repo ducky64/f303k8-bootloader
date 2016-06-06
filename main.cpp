@@ -41,10 +41,10 @@ namespace BLPROTO {
   // Sets the boot out pin high.
   const uint8_t CMD_SET_BOOTOUT = 0x03;
 
-  // CMD_WRITE_DATA (uint32 startAddress) (uint16 length) (uint32 CRC32)
+  // CMD_WRITE_DATA (uint32 startAddress) (uint16 length) (uint16 CRC16)
   //   length*(uint8 data)
   // Writes data of length starting at the specified address.
-  // CRC32 is of the data only.
+  // CRC is of the data only.
   const uint8_t CMD_WRITE_DATA = 0x06;
 
   // CMD_RUN (uint32 address)
@@ -189,6 +189,7 @@ int bootloaderMaster() {
       break;
     }
     i2c.read(BLPROTO::ADDRESS_GLOBAL, (char*)cmd, 1);
+    // TODO: better I2C robustness, like if device doesn't respond
     if (cmd[0] != BLPROTO::RESP_PING) { break; }
 
     uint8_t thisDeviceAddress = (numDevices + addrOffset) << 1;
