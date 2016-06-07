@@ -67,7 +67,6 @@ namespace BLPROTO {
   // or RESP_STATUS_NONE 0x00
   const uint8_t CMD_STATUS = 0x10;
 
-  const uint8_t RESP_STATUS_NONE = 0x00;
   const uint8_t RESP_STATUS_BUSY = 0x01;
   const uint8_t RESP_STATUS_DONE = 0x02;
 
@@ -164,7 +163,6 @@ uint8_t process_bootloader_command(ISPBase &isp, uint8_t* cmd, size_t length) {
     app_write_ptr += data_length;
     return rtn;
   } else if (cmd[0] == 'J') {
-    runApp((uint32_t)APP_BEGIN_PTR);
     // Use statics since the stack pointer gets reset without the compiler knowing.
     static uint32_t stack_ptr = 0;
     static void (*target)(void) = 0;
@@ -202,7 +200,7 @@ int bootloaderMaster() {
   uart.printf("Flash unlock: %i\r\n",
       isp.isp_begin());
   uart.printf("Flash erase: %i\r\n",
-      isp.erase(APP_BEGIN_PTR, 16384));
+      isp.erase(APP_BEGIN_PTR, 32768));
 
   I2C i2c(D4, D5);
   uint8_t i2cData[BLPROTO::MAX_PAYLOAD_LEN];
@@ -298,6 +296,10 @@ int bootloaderMaster() {
 }
 
 int bootloaderSlaveInit() {
+  Serial uart(SERIAL_TX, SERIAL_RX);
+  uart.baud(115200);
+  uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ ")\r\n");
+
   statusLED.setIdlePolarity(false);
 
   Timer heartbeatTimer;
@@ -367,8 +369,6 @@ int bootloaderSlaveInit() {
 
 
   uint8_t i2cData[BLPROTO::MAX_PAYLOAD_LEN];
-  uint8_t lastI2CDone = 0;
-  uint8_t lastI2CStatus = 0;
 
   // Main bootloader loop
   while (1) {
@@ -376,13 +376,21 @@ int bootloaderSlaveInit() {
       NVIC_SystemReset();
     }
 
+    isp.async_update();
+
     switch (i2c.receive()) {
     case I2CSlave::ReadAddressed:
       if (lastI2CCommand == BLPROTO::CMD_PING) {
         i2c.write(BLPROTO::RESP_PING);
       } else if (lastI2CCommand == BLPROTO::CMD_STATUS) {
-          i2c.write(lastI2CDone);
-          i2c.write(lastI2CStatus);
+        uint8_t status;
+        if (isp.get_last_async_status(&status)) {
+          i2c.write(BLPROTO::RESP_STATUS_DONE);
+          i2c.write(status);
+        } else {
+          i2c.write(BLPROTO::RESP_STATUS_BUSY);
+          i2c.write(0xff);
+        }
       } else {
         // Drop everything else
       }
@@ -395,11 +403,9 @@ int bootloaderSlaveInit() {
         if (!i2c.read((char*)i2cData, 8)) {
           uint32_t startAddr = deserialize_uint32(i2cData+0);
           uint32_t len = deserialize_uint32(i2cData+4);
-          lastI2CDone = BLPROTO::RESP_STATUS_DONE;
-          lastI2CStatus = isp.erase((void*)startAddr, len);
+          isp.async_erase((void*)startAddr, len);
         } else {
-          lastI2CDone = BLPROTO::RESP_STATUS_DONE;
-          lastI2CStatus = 127;
+          // TODO: better error handling
         }
       } else if (lastI2CCommand == BLPROTO::CMD_JUMP) {
         if (!i2c.read((char*)i2cData, 4)) {

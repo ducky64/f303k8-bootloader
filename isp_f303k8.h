@@ -36,63 +36,151 @@ public:
   }
 
   uint8_t erase(void* start_addr, size_t length) {
-    if (length % ERASE_SIZE != 0) {
-      return 255;
+    async_erase(start_addr, length);
+    uint8_t status;
+    while (!get_last_async_status(&status)) {
+      async_update();
     }
-    size_t addr = (uint32_t)start_addr;
-    if (addr % ERASE_SIZE != 0) {
-      return 254;
-    }
-    if (!(addr >= FLASH_START && addr <= FLASH_END)) {
-      return 253;
-    }
-    if (addr + length > FLASH_END + 1) {
-      return 252;
-    }
-
-    size_t page = addr - FLASH_START;
-    size_t page_end = page + length;
-    while (page < page_end) {
-      FLASH_PageErase(page);
-
-      HAL_StatusTypeDef status = FLASH_WaitForLastOperation(HAL_MAX_DELAY);
-      static_assert(HAL_OK == 0, "HAL_OK must be zero");
-      if (status != HAL_OK) {
-        CLEAR_BIT(FLASH->CR, FLASH_CR_PER);
-        return status;
-      }
-
-      page += ERASE_SIZE;
-    }
-    CLEAR_BIT(FLASH->CR, FLASH_CR_PER);
-    return 0;
+    return status;
   }
 
   uint8_t write(void* start_addr, void* data, size_t length) {
+    async_write(start_addr, data, length);
+    uint8_t status;
+    while (!get_last_async_status(&status)) {
+      async_update();
+    }
+    return status;
+  }
+
+  void async_update() {
+    if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_BSY)) {
+      return;
+    }
+    if (async_op == OP_ERASE) {
+      if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_WRPERR) || __HAL_FLASH_GET_FLAG(FLASH_FLAG_PGERR)) {
+        CLEAR_BIT(FLASH->CR, FLASH_CR_PER);
+        async_op = OP_NONE;
+        async_status = 1;
+        return;
+      }
+
+      if (async_length_remaining > 0) {
+        FLASH_PageErase(async_addr_current);
+
+        async_addr_current += ERASE_SIZE;
+        async_length_remaining -= ERASE_SIZE;
+      } else {
+        CLEAR_BIT(FLASH->CR, FLASH_CR_PER);
+        async_op = OP_NONE;
+        async_status = 0;
+      }
+    } else if (async_op == OP_WRITE) {
+      if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_WRPERR) || __HAL_FLASH_GET_FLAG(FLASH_FLAG_PGERR)) {
+        CLEAR_BIT(FLASH->CR, FLASH_CR_PG);
+        async_op = OP_NONE;
+        async_status = 1;
+        return;
+      }
+
+      if (async_length_remaining > 0) {
+        if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_EOP)) {
+          __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP);
+        }
+        CLEAR_BIT(FLASH->CR, FLASH_CR_PG);
+
+        uint16_t halfword = ((*(uint8_t*)(async_data_ptr+0)) << 0)
+            + ((*(uint8_t*)(async_data_ptr+1)) << 8);
+
+        FLASH_Program_HalfWord(async_addr_current, halfword);
+
+        async_addr_current += WRITE_SIZE;
+        async_data_ptr += WRITE_SIZE;
+        async_length_remaining -= WRITE_SIZE;
+      } else {
+        CLEAR_BIT(FLASH->CR, FLASH_CR_PG);
+        async_op = OP_NONE;
+        async_status = 0;
+      }
+    }
+  }
+
+  virtual bool get_last_async_status(uint8_t* statusOut) {
+    *statusOut = async_status;
+    return async_op == OP_NONE;
+  }
+
+  virtual void async_erase(void* start_addr, size_t length) {
+    if (length % ERASE_SIZE != 0) {
+      async_status = 255;
+      return;
+    }
+    size_t addr = (uint32_t)start_addr;
+    if (addr % ERASE_SIZE != 0) {
+      async_status = 254;
+      return;
+    }
+    if (!(addr >= FLASH_START && addr <= FLASH_END)) {
+      async_status = 253;
+
+      return;
+    }
+    if (addr + length > FLASH_END + 1) {
+      async_status = 252;
+      return;
+    }
+
+    async_op = OP_ERASE;
+    async_addr_current = (uint32_t)start_addr;
+    async_length_remaining = length;
+
+    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_WRPERR | FLASH_FLAG_PGERR);
+    async_update();
+  }
+
+
+  virtual void async_write(void* start_addr, void* data, size_t length) {
     if (length % WRITE_SIZE != 0) {
-      return 255;
+      async_status = 255;
+      return;
     }
     size_t addr = (uint32_t)start_addr;
     if (addr % WRITE_SIZE != 0) {
-      return 254;
+      async_status = 254;
+      return;
     }
     if (!(addr >= FLASH_START && addr <= FLASH_END)) {
-      return 253;
+      async_status = 253;
+      return;
     }
 
-    size_t addr_end = addr + length;
-    while (addr < addr_end) {
-      uint16_t halfword = ((*(uint8_t*)(data+0)) << 0) + ((*(uint8_t*)(data+1)) << 8);
-      HAL_StatusTypeDef status = HAL_FLASH_Program(TYPEPROGRAM_HALFWORD, addr, halfword);
+    async_op = OP_WRITE;
+    async_addr_current = (uint32_t)start_addr;
+    async_data_ptr = (uint8_t*)data;
+    async_length_remaining = length;
 
-      if (status != HAL_OK) {
-        return status;
-      }
+    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_WRPERR | FLASH_FLAG_PGERR);
+    async_update();
+  }
 
-      addr += WRITE_SIZE;
-      data += WRITE_SIZE;
-    }
-    return 0;
+private:
+  enum AsyncOp {OP_NONE, OP_ERASE, OP_WRITE};
+  AsyncOp async_op;
+  uint32_t async_addr_current;
+  uint8_t* async_data_ptr;
+  size_t async_length_remaining;
+  uint8_t async_status;
+
+  // for some reason, this isn't exposed in stm32f3xx_hal_flash.h
+  static void FLASH_Program_HalfWord(uint32_t Address, uint16_t Data)
+  {
+    /* Clear pending flags (if any) */
+    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_WRPERR | FLASH_FLAG_PGERR);
+
+    /* Proceed to program the new data */
+    SET_BIT(FLASH->CR, FLASH_CR_PG);
+
+    *(__IO uint16_t*)Address = Data;
   }
 };
 

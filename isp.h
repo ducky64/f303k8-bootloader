@@ -52,6 +52,22 @@ public:
    * Returns zero when successful, otherwise an error code.
    */
   virtual uint8_t write(void* start_addr, void* data, size_t length) = 0;
+
+  /**
+   * During an async operation, this must be called periodically.
+   */
+  virtual void async_update() = 0;
+
+  /**
+   * Returns true if the last async operation has finished, false if it is still
+   * ongoing.
+   *
+   * If the operation has finished, the output status code will be in statusOut.
+   */
+  virtual bool get_last_async_status(uint8_t* statusOut) = 0;
+
+  virtual void async_erase(void* start_addr, size_t length) = 0;
+  virtual void async_write(void* start_addr, void* data, size_t length) = 0;
 };
 
 #endif
