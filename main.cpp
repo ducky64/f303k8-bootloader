@@ -6,13 +6,16 @@
  */
 
 #include "mbed.h"
+#include "endian.h"
+
 #include "ActivityLED.h"
 #include "isp_f303k8.h"
 
 DigitalIn bootInPin(D3, PullDown);
 DigitalOut bootOutPin(D6);
 
-const size_t I2C_BUF_LENGTH = 512;
+ActivityLED statusLED(LED1);
+
 const uint32_t I2C_FREQUENCY = 400000;
 
 const uint32_t LED_PULSE_TIME = 50;
@@ -26,6 +29,8 @@ namespace BLPROTO {
   const uint32_t DELAY_MS_BOOT_TO_ADDR = 10;
 
   const uint8_t ADDRESS_GLOBAL = 0x42 << 1;
+
+  const size_t MAX_PAYLOAD_LEN = 512; // TODO: size this more optimally
 
   // CMD_PING
   // <- RESP_PING
@@ -41,8 +46,12 @@ namespace BLPROTO {
   // Sets the boot out pin high.
   const uint8_t CMD_SET_BOOTOUT = 0x03;
 
+  // CMD_ERASE (uint32 startAddress) (uint32 length)
+  // Erases a block.
+  const uint8_t CMD_ERASE = 0x06;
+
   // CMD_WRITE_DATA (uint32 startAddress) (uint16 length) (uint16 CRC16)
-  //   length*(uint8 data)
+  //   (length*uint8 data)
   // Writes data of length starting at the specified address.
   // CRC is of the data only.
   const uint8_t CMD_WRITE_DATA = 0x06;
@@ -53,14 +62,20 @@ namespace BLPROTO {
   const uint8_t CMD_JUMP = 0x08;
 
   // CMD_LAST_STATUS
-  // <- RESP_STATUS_BUSY
+  // <- RESP_STATUS_BUSY 0x00
   // or RESP_STATUS_DONE (uint8 status)
-  // or RESP_STATUS_NONE
+  // or RESP_STATUS_NONE 0x00
   const uint8_t CMD_STATUS = 0x10;
 
-  const uint8_t RESP_STATUS_BUSY = 0x00;
-  const uint8_t RESP_STATUS_DONE = 0x01;
-  const uint8_t RESP_STATUS_NONE = 0x02;
+  const uint8_t RESP_STATUS_NONE = 0x00;
+  const uint8_t RESP_STATUS_BUSY = 0x01;
+  const uint8_t RESP_STATUS_DONE = 0x02;
+
+  // Given the device number (position in chain), return the mbed-style I2C
+  // address.
+  constexpr uint8_t DEVICE_ADDR(uint8_t device_num) {
+    return (device_num + 1) << 1;
+  }
 }
 
 void dumpmem(Serial& serial, void* start_addr, size_t length, size_t bytes_per_line) {
@@ -94,6 +109,32 @@ bool hex_char_to_nibble(uint8_t hex_char, uint8_t* nibble_out) {
   }
 }
 
+/**
+ * Runs an application at the specified address. Should not return under normal
+ * circumstances.
+ */
+void runApp(uint32_t addr) {
+  // Use statics since the stack pointer gets reset without the compiler knowing.
+  static uint32_t stack_ptr = 0;
+  static void (*target)(void) = 0;
+
+  stack_ptr = (*(uint32_t*)(addr + 0));
+  target = (void (*)(void))(*(uint32_t*)(addr + 4));
+
+  // Just to be extra safe
+  for (uint8_t i=0; i<NVIC_NUM_VECTORS; i++) {
+    NVIC_DisableIRQ((IRQn_Type)i);
+  }
+
+  // Reset the interrupt table so the application can re-load it
+  SCB->VTOR = addr;
+
+  __set_MSP(stack_ptr);
+
+  target();
+}
+
+
 // TODO FIX THIS and make this not awful global state
 void* app_write_ptr = &_FlashEnd;
 
@@ -123,6 +164,7 @@ uint8_t process_bootloader_command(ISPBase &isp, uint8_t* cmd, size_t length) {
     app_write_ptr += data_length;
     return rtn;
   } else if (cmd[0] == 'J') {
+    runApp((uint32_t)APP_BEGIN_PTR);
     // Use statics since the stack pointer gets reset without the compiler knowing.
     static uint32_t stack_ptr = 0;
     static void (*target)(void) = 0;
@@ -160,48 +202,68 @@ int bootloaderMaster() {
   uart.printf("Flash unlock: %i\r\n",
       isp.isp_begin());
   uart.printf("Flash erase: %i\r\n",
-      isp.erase(APP_BEGIN_PTR, 32768));
+      isp.erase(APP_BEGIN_PTR, 16384));
 
   I2C i2c(D4, D5);
+  uint8_t i2cData[BLPROTO::MAX_PAYLOAD_LEN];
 
   i2c.frequency(I2C_FREQUENCY);
-
-  ActivityLED statusLED(LED1, true);
-
-  Timer heartbeatTimer;
-  uint32_t nextHeartbeatTime = 0;
-  heartbeatTimer.start();
 
   wait_ms(500);
   bootOutPin = 1;
 
   uint8_t numDevices = 0;
-  uint8_t addrOffset = 2;
 
   while (1) {
     wait_ms(BLPROTO::DELAY_MS_BOOT_TO_ADDR);
 
-    uint8_t cmd[2];
-
-    cmd[0] = BLPROTO::CMD_PING;
-    if (i2c.write(BLPROTO::ADDRESS_GLOBAL, (char*)cmd, 1) != 0) {
+    i2c.frequency(I2C_FREQUENCY); // reset the I2C device
+    i2cData[0] = BLPROTO::CMD_PING;
+    if (i2c.write(BLPROTO::ADDRESS_GLOBAL, (char*)i2cData, 1, true) != 0) {
       // Next device in chain didn't respond to ping, reached end of chain
       break;
     }
-    i2c.read(BLPROTO::ADDRESS_GLOBAL, (char*)cmd, 1);
+    i2c.read(BLPROTO::ADDRESS_GLOBAL, (char*)i2cData, 1);
     // TODO: better I2C robustness, like if device doesn't respond
-    if (cmd[0] != BLPROTO::RESP_PING) { break; }
+    if (i2cData[0] != BLPROTO::RESP_PING) { break; }
 
-    uint8_t thisDeviceAddress = (numDevices + addrOffset) << 1;
-    cmd[0] = BLPROTO::CMD_SET_ADDRESS;
-    cmd[1] = thisDeviceAddress;
-    i2c.write(BLPROTO::ADDRESS_GLOBAL, (char*)cmd, 2);
+    uint8_t thisDeviceAddress = BLPROTO::DEVICE_ADDR(numDevices);
+    i2cData[0] = BLPROTO::CMD_SET_ADDRESS;
+    i2cData[1] = thisDeviceAddress;
+    i2c.write(BLPROTO::ADDRESS_GLOBAL, (char*)i2cData, 2);
 
-    cmd[0] = BLPROTO::CMD_SET_BOOTOUT;
-    i2c.write(thisDeviceAddress, (char*)cmd, 1);
+    i2cData[0] = BLPROTO::CMD_SET_BOOTOUT;
+    i2c.write(thisDeviceAddress, (char*)i2cData, 1);
 
     numDevices += 1;
   }
+
+  wait_ms(1000);
+
+  i2cData[0] = BLPROTO::CMD_ERASE;
+  serialize_uint32(i2cData+1, (uint32_t)APP_BEGIN_PTR);
+  serialize_uint32(i2cData+5, 16384);
+
+  i2c.write(BLPROTO::DEVICE_ADDR(1), (char*)i2cData, 9);
+
+  uint8_t resp = BLPROTO::RESP_STATUS_BUSY;
+  uint8_t status;
+  while (resp == BLPROTO::RESP_STATUS_BUSY) {
+    i2c.frequency(I2C_FREQUENCY); // reset the I2C device
+    i2cData[0] = BLPROTO::CMD_STATUS;
+    i2c.write(BLPROTO::DEVICE_ADDR(1), (char*)i2cData, 1);
+    i2c.read(BLPROTO::DEVICE_ADDR(1), (char*)i2cData, 2);
+    resp = i2cData[0];
+    status = i2cData[1];
+  }
+
+  uart.printf("Status <- %i\n", status);
+
+  statusLED.setIdlePolarity(true);
+
+  Timer heartbeatTimer;
+  uint32_t nextHeartbeatTime = 0;
+  heartbeatTimer.start();
 
   const size_t RPC_BUFSIZE = 4096;
   static char rpc_inbuf[RPC_BUFSIZE], rpc_outbuf[RPC_BUFSIZE];
@@ -232,15 +294,11 @@ int bootloaderMaster() {
       statusLED.pulse(HEARTBEAT_PULSE_TIME);
     }
   }
+  return 0;
 }
 
-int bootloaderSlave() {
-  I2CSlave i2c(D4, D5);
-  F303K8ISP isp;
-
-  uint8_t i2c_buf[I2C_BUF_LENGTH];
-
-  ActivityLED statusLED(LED1, false);
+int bootloaderSlaveInit() {
+  statusLED.setIdlePolarity(false);
 
   Timer heartbeatTimer;
   uint32_t nextHeartbeatTime = 0;
@@ -261,13 +319,15 @@ int bootloaderSlave() {
 
   statusLED.setIdlePolarity(true);
 
+  I2CSlave i2c(D4, D5);
   i2c.frequency(I2C_FREQUENCY);
   i2c.address(BLPROTO::ADDRESS_GLOBAL);
-  uint8_t myAddress = BLPROTO::ADDRESS_GLOBAL;
+  uint8_t address = BLPROTO::ADDRESS_GLOBAL;
+
   uint8_t lastI2CCommand = 0;
 
   // Wait for initialization I2C command to get address
-  while (myAddress == BLPROTO::ADDRESS_GLOBAL) {
+  while (address == BLPROTO::ADDRESS_GLOBAL) {
     if (bootInPin == 0) {
       NVIC_SystemReset();
     }
@@ -285,7 +345,7 @@ int bootloaderSlave() {
       if (lastI2CCommand == BLPROTO::CMD_SET_ADDRESS) {
         uint8_t payload = i2c.read();
         if (payload != -1) {
-          myAddress = payload;
+          address = payload;
         }
       } else {
         // Drop everything else
@@ -300,7 +360,15 @@ int bootloaderSlave() {
     }
   }
 
-  i2c.address(myAddress);
+  i2c.address(address);
+
+  F303K8ISP isp;
+  isp.isp_begin();
+
+
+  uint8_t i2cData[BLPROTO::MAX_PAYLOAD_LEN];
+  uint8_t lastI2CDone = 0;
+  uint8_t lastI2CStatus = 0;
 
   // Main bootloader loop
   while (1) {
@@ -312,6 +380,9 @@ int bootloaderSlave() {
     case I2CSlave::ReadAddressed:
       if (lastI2CCommand == BLPROTO::CMD_PING) {
         i2c.write(BLPROTO::RESP_PING);
+      } else if (lastI2CCommand == BLPROTO::CMD_STATUS) {
+          i2c.write(lastI2CDone);
+          i2c.write(lastI2CStatus);
       } else {
         // Drop everything else
       }
@@ -320,6 +391,22 @@ int bootloaderSlave() {
       lastI2CCommand = i2c.read();
       if (lastI2CCommand == BLPROTO::CMD_SET_BOOTOUT) {
         bootOutPin = 1;
+      } else if (lastI2CCommand == BLPROTO::CMD_ERASE) {
+        if (!i2c.read((char*)i2cData, 8)) {
+          uint32_t startAddr = deserialize_uint32(i2cData+0);
+          uint32_t len = deserialize_uint32(i2cData+4);
+          lastI2CDone = BLPROTO::RESP_STATUS_DONE;
+          lastI2CStatus = isp.erase((void*)startAddr, len);
+        } else {
+          lastI2CDone = BLPROTO::RESP_STATUS_DONE;
+          lastI2CStatus = 127;
+        }
+      } else if (lastI2CCommand == BLPROTO::CMD_JUMP) {
+        if (!i2c.read((char*)i2cData, 4)) {
+          uint32_t addr = deserialize_uint32(i2cData);
+          isp.isp_end();
+          runApp(addr);
+        }
       } else {
         // Drop everything else
       }
@@ -328,11 +415,6 @@ int bootloaderSlave() {
 
     statusLED.update();
     if (heartbeatTimer.read_ms() >= nextHeartbeatTime) {
-      Serial uart(SERIAL_TX, SERIAL_RX);
-      uart.baud(115200);
-      uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ ")\r\n");
-      uart.printf("%i", myAddress);
-
       nextHeartbeatTime += HEARTBEAT_PERIOD;
       statusLED.pulse(HEARTBEAT_PULSE_TIME);
     }
@@ -348,6 +430,6 @@ int main() {
     wait_ms(BLPROTO::DELAY_MS_BOOTSCAN);
     return bootloaderMaster();
   } else {
-    return bootloaderSlave();
+    return bootloaderSlaveInit();
   }
 }

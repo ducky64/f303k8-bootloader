@@ -46,6 +46,9 @@ public:
     if (!(addr >= FLASH_START && addr <= FLASH_END)) {
       return 253;
     }
+    if (addr + length > FLASH_END + 1) {
+      return 252;
+    }
 
     size_t page = addr - FLASH_START;
     size_t page_end = page + length;
