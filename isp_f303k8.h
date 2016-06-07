@@ -11,6 +11,9 @@ protected:
   const size_t WRITE_SIZE = 2;
 
 public:
+  F303K8ISP() : async_op(OP_NONE) {
+  }
+
   bool isp_begin() {
     return HAL_FLASH_Unlock() == HAL_OK;
   }
