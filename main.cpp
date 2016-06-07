@@ -112,7 +112,7 @@ bool hex_char_to_nibble(uint8_t hex_char, uint8_t* nibble_out) {
  * Runs an application at the specified address. Should not return under normal
  * circumstances.
  */
-void runApp(uint32_t addr) {
+void runApp(void* addr) {
   // Use statics since the stack pointer gets reset without the compiler knowing.
   static uint32_t stack_ptr = 0;
   static void (*target)(void) = 0;
@@ -126,7 +126,7 @@ void runApp(uint32_t addr) {
   }
 
   // Reset the interrupt table so the application can re-load it
-  SCB->VTOR = addr;
+  SCB->VTOR = (uint32_t)addr;
 
   __set_MSP(stack_ptr);
 
@@ -163,24 +163,7 @@ uint8_t process_bootloader_command(ISPBase &isp, uint8_t* cmd, size_t length) {
     app_write_ptr += data_length;
     return rtn;
   } else if (cmd[0] == 'J') {
-    // Use statics since the stack pointer gets reset without the compiler knowing.
-    static uint32_t stack_ptr = 0;
-    static void (*target)(void) = 0;
-
-    stack_ptr = (*(uint32_t*)(APP_BEGIN_PTR + 0));
-    target = (void (*)(void))(*(uint32_t*)(APP_BEGIN_PTR + 4));
-
-    // Just to be extra safe
-    for (uint8_t i=0; i<NVIC_NUM_VECTORS; i++) {
-      NVIC_DisableIRQ((IRQn_Type)i);
-    }
-
-    // Reset the interrupt table so the application can re-load it
-    SCB->VTOR = (uint32_t)APP_BEGIN_PTR;
-
-    __set_MSP(stack_ptr);
-
-    target();
+    runApp(APP_BEGIN_PTR);
     return 63;
   } else {  // unknown command
     return 125;
@@ -235,8 +218,6 @@ int bootloaderMaster() {
 
     numDevices += 1;
   }
-
-  wait_ms(1000);
 
   i2cData[0] = BLPROTO::CMD_ERASE;
   serialize_uint32(i2cData+1, (uint32_t)APP_BEGIN_PTR);
@@ -411,7 +392,7 @@ int bootloaderSlaveInit() {
         if (!i2c.read((char*)i2cData, 4)) {
           uint32_t addr = deserialize_uint32(i2cData);
           isp.isp_end();
-          runApp(addr);
+          runApp((void*)addr);
         }
       } else {
         // Drop everything else
