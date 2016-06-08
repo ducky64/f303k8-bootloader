@@ -42,10 +42,15 @@ namespace BLPROTO {
   // <- RESP_STATUS_*
   const uint8_t CMD_STATUS = 0x10;
 
-  const uint8_t RESP_STATUS_BUSY = 0x00;
-  const uint8_t RESP_STATUS_DONE = 0x01;
-  const uint8_t RESP_STATUS_ERR_INVALID_ARGS = 0x02;
-  const uint8_t RESP_STATUS_ERR_FLASH = 0x03;
+  enum RESP_STATUS {
+    BUSY = 0x00,
+    DONE = 0x5A,
+    ERR_INVALID_FORMAT = 0x10,
+    ERR_INVALID_ARGS,
+    ERR_INVALID_CHECKSUM,
+    ERR_FLASH,
+    ERR_UNKNOWN
+  };
 
   // Given the device number (position in chain), return the mbed-style I2C
   // address.

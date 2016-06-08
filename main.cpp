@@ -6,6 +6,8 @@
  */
 
 #include "mbed.h"
+
+#include "crc.h"
 #include "endian.h"
 
 #include "blproto.h"
@@ -118,7 +120,7 @@ uint8_t process_bootloader_command(ISPBase &isp, I2C &i2c, uint8_t* cmd, size_t 
   uint8_t i2cData[BLPROTO::MAX_PAYLOAD_LEN];
 
   if (cmd[0] == 'W') {
-    size_t data_length = length - 17;
+    size_t data_length = length - 21;
     if (data_length % 2 != 0) {
       return 127; // not byte aligned
     }
@@ -134,29 +136,29 @@ uint8_t process_bootloader_command(ISPBase &isp, I2C &i2c, uint8_t* cmd, size_t 
     }
     uint32_t addr = deserialize_uint32(cmd);
 
-    if (!ascii_hex_to_uint8_array(cmd, cmd+13, 2)) {
+    if (!ascii_hex_to_uint8_array(cmd, cmd+13, 4)) {
       return 123;
     }
-    uint16_t crc = deserialize_uint16(cmd);
+    uint32_t crc = deserialize_uint32(cmd);
 
-    if (!ascii_hex_to_uint8_array(cmd, cmd+17, data_length)) {
+    if (!ascii_hex_to_uint8_array(cmd, cmd+21, data_length)) {
       return 126;
     }
 
-//    uart.printf("I2C Write %x: ptr 0x% 8x, crc 0x% 4x, len %i  ", device, addr, crc, data_length);
+//    uart.printf("I2C Write %x: ptr 0x% 8x, crc 0x% 8x / 0x% 8x, len %i  ", device, addr, crc,computed_crc, data_length);
 
     i2cData[0] = BLPROTO::CMD_WRITE;
     serialize_uint32(i2cData+1, addr);
     serialize_uint16(i2cData+5, (uint16_t)data_length);
-    serialize_uint16(i2cData+7, crc);
+    serialize_uint32(i2cData+7, crc);
     for (size_t i=0; i<data_length; i++) {
-      i2cData[i+9] = cmd[i];
+      i2cData[i+11] = cmd[i];
     }
 
-    i2c.write(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, data_length + 9);
+    i2c.write(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, data_length +11);
 
-    uint8_t resp = BLPROTO::RESP_STATUS_BUSY;
-    while (resp == BLPROTO::RESP_STATUS_BUSY) {
+    uint8_t resp = BLPROTO::RESP_STATUS::BUSY;
+    while (resp == BLPROTO::RESP_STATUS::BUSY) {
       i2c.frequency(I2C_FREQUENCY); // reset the I2C device
       i2cData[0] = BLPROTO::CMD_STATUS;
       i2c.write(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, 1);
@@ -187,8 +189,8 @@ uint8_t process_bootloader_command(ISPBase &isp, I2C &i2c, uint8_t* cmd, size_t 
 
     i2c.write(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, 9);
 
-    uint8_t resp = BLPROTO::RESP_STATUS_BUSY;
-    while (resp == BLPROTO::RESP_STATUS_BUSY) {
+    uint8_t resp = BLPROTO::RESP_STATUS::BUSY;
+    while (resp == BLPROTO::RESP_STATUS::BUSY) {
       i2c.frequency(I2C_FREQUENCY); // reset the I2C device
       i2cData[0] = BLPROTO::CMD_STATUS;
       i2c.write(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, 1);
@@ -371,8 +373,9 @@ int bootloaderSlaveInit() {
   F303K8ISP isp;
   isp.isp_begin();
 
-
   uint8_t i2cData[BLPROTO::MAX_PAYLOAD_LEN];
+  // Override status. DONE means to read from ISP status.
+  BLPROTO::RESP_STATUS lastStatus = BLPROTO::RESP_STATUS::DONE;
 
   // Main bootloader loop
   while (1) {
@@ -390,21 +393,31 @@ int bootloaderSlaveInit() {
       if (lastI2CCommand == BLPROTO::CMD_PING) {
         i2c.write(BLPROTO::RESP_PING);
       } else if (lastI2CCommand == BLPROTO::CMD_STATUS) {
-        uint8_t status;
-        if (isp.get_last_async_status(&status)) {
-          if (status == 0) {
-            i2c.write(BLPROTO::RESP_STATUS_DONE);
+        if (lastStatus == BLPROTO::RESP_STATUS::DONE) {
+          ISPBase::ISPStatus ispStatus;
+          if (isp.get_last_async_status(&ispStatus)) {
+            if (ispStatus == ISPBase::OK) {
+              i2c.write(BLPROTO::RESP_STATUS::DONE);
+            } else if (ispStatus == ISPBase::ERR_INVALID_ARGS) {
+              // TODO: differentiate argcheck / other error reporting
+              i2c.write(BLPROTO::RESP_STATUS::ERR_INVALID_ARGS);
+            } else if (ispStatus == ISPBase::ERR_FLASH) {
+              i2c.write(BLPROTO::RESP_STATUS::ERR_FLASH);
+            } else {
+              i2c.write(BLPROTO::RESP_STATUS::ERR_UNKNOWN);
+            }
           } else {
-            // TODO: differentiate argcheck / other error reporting
-            i2c.write(BLPROTO::RESP_STATUS_ERR_FLASH);
+            i2c.write(BLPROTO::RESP_STATUS::BUSY);
           }
         } else {
-          i2c.write(BLPROTO::RESP_STATUS_BUSY);
+          i2c.write(lastStatus);
         }
+
       } else {
         // Drop everything else
       }
       break;
+
     case I2CSlave::WriteAddressed:
       statusLED.pulse(LED_PULSE_TIME);
       lastI2CCommand = i2c.read();
@@ -415,24 +428,30 @@ int bootloaderSlaveInit() {
           uint32_t startAddr = deserialize_uint32(i2cData+0);
           uint32_t len = deserialize_uint32(i2cData+4);
           isp.async_erase((void*)startAddr, len);
+          lastStatus = BLPROTO::RESP_STATUS::DONE;
         } else {
-          // TODO: better error handling
+          lastStatus = BLPROTO::RESP_STATUS::ERR_INVALID_FORMAT;
         }
       } else if (lastI2CCommand == BLPROTO::CMD_WRITE) {
-        if (!i2c.read((char*)i2cData, 8)) {
+        if (!i2c.read((char*)i2cData, 10)) {
           uint32_t startAddr = deserialize_uint32(i2cData+0);
           uint16_t len = deserialize_uint16(i2cData+4);
-          uint16_t crc = deserialize_uint16(i2cData+6);
+          uint32_t crc = deserialize_uint32(i2cData+6);
           // TODO: allow len >= 256 transfers by breaking i2c read calls into
           // smaller chunks
           if (!i2c.read((char*)i2cData, len)) {
-            // TODO: CRC check
-            isp.async_write((void*)startAddr, i2cData, len);
+            uint32_t computed_crc = CRC32::compute_crc(i2cData, len);
+            if (computed_crc == crc) {
+              isp.async_write((void*)startAddr, i2cData, len);
+              lastStatus = BLPROTO::RESP_STATUS::DONE;
+            } else {
+              lastStatus = BLPROTO::RESP_STATUS::ERR_INVALID_CHECKSUM;
+            }
           } else {
-            // TODO: better error handling
+            lastStatus = BLPROTO::RESP_STATUS::ERR_INVALID_FORMAT;
           }
         } else {
-          // TODO: better error handling
+          lastStatus = BLPROTO::RESP_STATUS::ERR_INVALID_FORMAT;
         }
       } else if (lastI2CCommand == BLPROTO::CMD_JUMP) {
         if (!i2c.read((char*)i2cData, 4)) {

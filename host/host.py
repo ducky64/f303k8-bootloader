@@ -1,4 +1,5 @@
 import argparse
+import binascii
 import logging
 import serial
 import time
@@ -46,8 +47,8 @@ while True:
     cmd += b'W'
     cmd += ("%04x" % args.device).encode('ascii')
     cmd += ("%08x" % curr_address).encode('ascii')
-    crc = 0 # TODO IMPLEMENT ME
-    cmd += ("%04x" % crc).encode('ascii')
+    crc = binascii.crc32(chunk) & 0xffffffff
+    cmd += ("%08x" % crc).encode('ascii')
     cmd += chunk.encode('hex')
     cmd += b'\n'
     logging.debug("Serial -> Write(0x% 8x -> %i)", curr_address, len(chunk))
@@ -55,8 +56,11 @@ while True:
 
     ser.write(cmd)
 
-    line = ser.readline()
-    logging.debug("Serial <- '%s'", line.strip())  # discard the ending space
+    line = ser.readline().strip()
+    logging.debug("Serial <- '%s'", line)  # discard the ending space
+    if (line != 'D90'):
+      logging.error("Bad response from bootloader")
+      exit()
   else:
     break
 

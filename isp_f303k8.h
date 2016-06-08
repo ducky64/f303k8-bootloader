@@ -38,18 +38,18 @@ public:
     return WRITE_SIZE;
   }
 
-  uint8_t erase(void* start_addr, size_t length) {
+  ISPStatus erase(void* start_addr, size_t length) {
     async_erase(start_addr, length);
-    uint8_t status;
+    ISPStatus status;
     while (!get_last_async_status(&status)) {
       async_update();
     }
     return status;
   }
 
-  uint8_t write(void* start_addr, void* data, size_t length) {
+  ISPStatus write(void* start_addr, void* data, size_t length) {
     async_write(start_addr, data, length);
-    uint8_t status;
+    ISPStatus status;
     while (!get_last_async_status(&status)) {
       async_update();
     }
@@ -67,7 +67,7 @@ public:
       if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_WRPERR) || __HAL_FLASH_GET_FLAG(FLASH_FLAG_PGERR)) {
         CLEAR_BIT(FLASH->CR, FLASH_CR_PER);
         async_op = OP_NONE;
-        async_status = 1;
+        async_status = ERR_FLASH;
         return false;
       }
 
@@ -80,14 +80,14 @@ public:
       } else {
         CLEAR_BIT(FLASH->CR, FLASH_CR_PER);
         async_op = OP_NONE;
-        async_status = 0;
+        async_status = OK;
         return false;
       }
     } else if (async_op == OP_WRITE) {
       if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_WRPERR) || __HAL_FLASH_GET_FLAG(FLASH_FLAG_PGERR)) {
         CLEAR_BIT(FLASH->CR, FLASH_CR_PG);
         async_op = OP_NONE;
-        async_status = 1;
+        async_status = ERR_FLASH;
         return false;
       }
 
@@ -109,35 +109,38 @@ public:
       } else {
         CLEAR_BIT(FLASH->CR, FLASH_CR_PG);
         async_op = OP_NONE;
-        async_status = 0;
+        async_status = OK;
         return false;
       }
     }
   }
 
-  virtual bool get_last_async_status(uint8_t* statusOut) {
+  virtual bool get_last_async_status(ISPStatus* statusOut) {
     *statusOut = async_status;
     return async_op == OP_NONE;
   }
 
-  virtual void async_erase(void* start_addr, size_t length) {
+  virtual bool async_erase(void* start_addr, size_t length) {
+    if (async_op != OP_NONE) {
+      return false;
+    }
+    async_status = OK;
+
     if (length % ERASE_SIZE != 0) {
-      async_status = 255;
-      return;
+      async_status = ERR_INVALID_ARGS;
     }
     size_t addr = (uint32_t)start_addr;
     if (addr % ERASE_SIZE != 0) {
-      async_status = 254;
-      return;
+      async_status = ERR_INVALID_ARGS;
     }
     if (!(addr >= FLASH_START && addr <= FLASH_END)) {
-      async_status = 253;
-
-      return;
+      async_status = ERR_INVALID_ARGS;
     }
     if (addr + length > FLASH_END + 1) {
-      async_status = 252;
-      return;
+      async_status = ERR_INVALID_ARGS;
+    }
+    if (async_status != OK) {
+      return true;
     }
 
     async_op = OP_ERASE;
@@ -146,22 +149,28 @@ public:
 
     __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_WRPERR | FLASH_FLAG_PGERR);
     async_update();
+
+    return true;
   }
 
 
-  virtual void async_write(void* start_addr, void* data, size_t length) {
+  virtual bool async_write(void* start_addr, void* data, size_t length) {
+    if (async_op != OP_NONE) {
+      return false;
+    }
+
     if (length % WRITE_SIZE != 0) {
-      async_status = 255;
-      return;
+      async_status = ERR_INVALID_ARGS;
     }
     size_t addr = (uint32_t)start_addr;
     if (addr % WRITE_SIZE != 0) {
-      async_status = 254;
-      return;
+      async_status = ERR_INVALID_ARGS;
     }
     if (!(addr >= FLASH_START && addr <= FLASH_END)) {
-      async_status = 253;
-      return;
+      async_status = ERR_INVALID_ARGS;
+    }
+    if (async_status != OK) {
+      return true;
     }
 
     async_op = OP_WRITE;
@@ -171,6 +180,8 @@ public:
 
     __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_WRPERR | FLASH_FLAG_PGERR);
     async_update();
+
+    return true;
   }
 
 private:
@@ -179,7 +190,7 @@ private:
   uint32_t async_addr_current;
   uint8_t* async_data_ptr;
   size_t async_length_remaining;
-  uint8_t async_status;
+  ISPStatus async_status;
 
   // for some reason, this isn't exposed in stm32f3xx_hal_flash.h
   static void FLASH_Program_HalfWord(uint32_t Address, uint16_t Data)
