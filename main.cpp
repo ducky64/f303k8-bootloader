@@ -14,6 +14,7 @@
 #include "isp_f303k8.h"
 
 Serial uart(SERIAL_TX, SERIAL_RX);
+Serial uart_in(D1, D0);
 
 DigitalIn bootInPin(D3, PullDown);
 DigitalOut bootOutPin(D6);
@@ -29,6 +30,7 @@ const uint32_t HEARTBEAT_INIT_PERIOD = 500;
 const uint32_t HEARTBEAT_PULSE_TIME = LED_PULSE_TIME;
 
 void dumpmem(Serial& serial, void* start_addr, size_t length, size_t bytes_per_line) {
+  serial.printf("\r\n");
   for (size_t maj=0; maj<length; maj+=bytes_per_line) {
     serial.printf("% 8x: ", (uint32_t)start_addr);
     // TODO: allow partial line prints
@@ -102,8 +104,14 @@ void runApp(void* addr) {
   SCB->VTOR = (uint32_t)addr;
 
   __set_MSP(stack_ptr);
+  __set_PSP(stack_ptr);
 
-  target();
+  goto *target;
+
+  // TODO: replace with standard function call instead of goto.
+  // For some reason, this increments the stack pointer past the top of memory,
+  // causing a hardfault when it tries to access those locations.
+  // target();
 }
 
 uint8_t process_bootloader_command(ISPBase &isp, I2C &i2c, uint8_t* cmd, size_t length) {
@@ -135,7 +143,7 @@ uint8_t process_bootloader_command(ISPBase &isp, I2C &i2c, uint8_t* cmd, size_t 
       return 126;
     }
 
-    uart.printf("I2C Write %x: ptr 0x% 8x, crc 0x% 4x, len %i  ", device, addr, crc, data_length);
+//    uart.printf("I2C Write %x: ptr 0x% 8x, crc 0x% 4x, len %i  ", device, addr, crc, data_length);
 
     i2cData[0] = BLPROTO::CMD_WRITE;
     serialize_uint32(i2cData+1, addr);
@@ -204,6 +212,7 @@ uint8_t process_bootloader_command(ISPBase &isp, I2C &i2c, uint8_t* cmd, size_t 
     serialize_uint32(i2cData+1, (uint32_t)APP_BEGIN_PTR);
 
     i2c.write(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, 5);
+
     return 0;
   } else {  // unknown command
     return 63;
@@ -266,8 +275,8 @@ int bootloaderMaster() {
   char* rpc_inptr = rpc_inbuf;  // next received byte pointer
 
   while (1) {
-    while (uart.readable()) {
-      char rx = uart.getc();
+    while (uart.readable() || uart_in.readable()) {
+      char rx = uart.readable() ? uart.getc() : uart_in.getc();
       if (rx == '\n' || rx == '\r') {
         *rpc_inptr = '\0';  // optionally append the string terminator
         uint8_t rtn = process_bootloader_command(isp, i2c,
@@ -429,6 +438,7 @@ int bootloaderSlaveInit() {
         if (!i2c.read((char*)i2cData, 4)) {
           uint32_t addr = deserialize_uint32(i2cData);
           isp.isp_end();
+          dumpmem(uart, (void*)addr, 1024, 16);
           runApp((void*)addr);
         }
       } else {
@@ -449,6 +459,7 @@ int main() {
   bootOutPin = 0;
 
   uart.baud(115200);
+  uart_in.baud(115200);
   uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ ")\r\n");
 
   wait_ms(BLPROTO::DELAY_MS_BOOTSCAN);  // wait for some time to let boot in stabilize

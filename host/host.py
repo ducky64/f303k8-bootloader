@@ -34,7 +34,6 @@ logging.debug("Serial: flushed %i bytes", len(bytes_read))
 curr_address = args.address
 
 ser.write('E%04x%08x%08x\n' % (args.device, args.address, args.memsize))
-logging.debug('E%04x%08x%08x\n' % (args.device, args.address, args.memsize))
 logging.debug("Serial -> Erase(0x% 8x, %i)", args.address, args.memsize)
 
 line = ser.readline()
@@ -62,7 +61,6 @@ while True:
     break
 
 ser.write('J%04x%08x\n' % (args.device, args.address))
-logging.debug('J%04x%08x\n' % (args.device, args.address))
 logging.debug("Serial -> Jump")
 
 ser.close()

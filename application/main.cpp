@@ -10,7 +10,7 @@
 PwmOut led0(D11);
 PwmOut led1(D12);
 
-PwmOut mainLed(LED1);
+DigitalOut mainLed(LED1);
 
 int main() {
   Serial uart(SERIAL_TX, SERIAL_RX);
