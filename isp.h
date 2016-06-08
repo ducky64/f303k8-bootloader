@@ -55,8 +55,10 @@ public:
 
   /**
    * During an async operation, this must be called periodically.
+   *
+   * Return true of currently busy.
    */
-  virtual void async_update() = 0;
+  virtual bool async_update() = 0;
 
   /**
    * Returns true if the last async operation has finished, false if it is still

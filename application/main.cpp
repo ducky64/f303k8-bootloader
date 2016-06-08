@@ -10,6 +10,8 @@
 PwmOut led0(D11);
 PwmOut led1(D12);
 
+PwmOut mainLed(LED1);
+
 int main() {
   Serial uart(SERIAL_TX, SERIAL_RX);
   uart.baud(115200);
@@ -26,8 +28,10 @@ int main() {
     }
     if (step == 128) {
       dir = false;
+      mainLed = !mainLed;
     } else if (step == 0) {
       dir = true;
+      mainLed = !mainLed;
     }
     int inv_step = 128 - step;
 

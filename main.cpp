@@ -8,8 +8,12 @@
 #include "mbed.h"
 #include "endian.h"
 
+#include "blproto.h"
+
 #include "ActivityLED.h"
 #include "isp_f303k8.h"
+
+Serial uart(SERIAL_TX, SERIAL_RX);
 
 DigitalIn bootInPin(D3, PullDown);
 DigitalOut bootOutPin(D6);
@@ -23,59 +27,6 @@ const uint32_t LED_PULSE_TIME = 50;
 const uint32_t HEARTBEAT_PERIOD = 1000;
 const uint32_t HEARTBEAT_INIT_PERIOD = 500;
 const uint32_t HEARTBEAT_PULSE_TIME = LED_PULSE_TIME;
-
-namespace BLPROTO {
-  const uint32_t DELAY_MS_BOOTSCAN = 50;  // delay, in ms, before doing the initial BOOT_IN check to determine master/slave
-  const uint32_t DELAY_MS_BOOT_TO_ADDR = 10;
-
-  const uint8_t ADDRESS_GLOBAL = 0x42 << 1;
-
-  const size_t MAX_PAYLOAD_LEN = 512; // TODO: size this more optimally
-
-  // CMD_PING
-  // <- RESP_PING
-  // Global and addressed mode.
-  const uint8_t CMD_PING = 0x02;
-  const uint8_t RESP_PING = 0x06;
-
-  // CMD_SET_ADDRESS (uint8 newAddress)
-  // Global mode only. Sets the I2C address of the device.
-  const uint8_t CMD_SET_ADDRESS = 0x04;
-
-  // CMD_SET_BOOTOUT
-  // Sets the boot out pin high.
-  const uint8_t CMD_SET_BOOTOUT = 0x03;
-
-  // CMD_ERASE (uint32 startAddress) (uint32 length)
-  // Erases a block.
-  const uint8_t CMD_ERASE = 0x06;
-
-  // CMD_WRITE_DATA (uint32 startAddress) (uint16 length) (uint16 CRC16)
-  //   (length*uint8 data)
-  // Writes data of length starting at the specified address.
-  // CRC is of the data only.
-  const uint8_t CMD_WRITE_DATA = 0x06;
-
-  // CMD_RUN (uint32 address)
-  // Runs the program beginning at the specified address. Not a simple jump,
-  // also sets up the initial PC, stack pointer, and vector table pointer.
-  const uint8_t CMD_JUMP = 0x08;
-
-  // CMD_LAST_STATUS
-  // <- RESP_STATUS_BUSY 0x00
-  // or RESP_STATUS_DONE (uint8 status)
-  // or RESP_STATUS_NONE 0x00
-  const uint8_t CMD_STATUS = 0x10;
-
-  const uint8_t RESP_STATUS_BUSY = 0x01;
-  const uint8_t RESP_STATUS_DONE = 0x02;
-
-  // Given the device number (position in chain), return the mbed-style I2C
-  // address.
-  constexpr uint8_t DEVICE_ADDR(uint8_t device_num) {
-    return (device_num + 1) << 1;
-  }
-}
 
 void dumpmem(Serial& serial, void* start_addr, size_t length, size_t bytes_per_line) {
   for (size_t maj=0; maj<length; maj+=bytes_per_line) {
@@ -109,6 +60,28 @@ bool hex_char_to_nibble(uint8_t hex_char, uint8_t* nibble_out) {
 }
 
 /**
+ * Reads through a array containing ASCII hex bytes and converts it into raw hex
+ * bytes. length is the number of bytes in the output (2x the number of
+ * characters in the input). Returns true if all bytes were converted, otherwise
+ * false (for example, if detected non-hex bytes).
+ * out may alias with in, doing an in-place decode.
+ */
+bool ascii_hex_to_uint8_array(uint8_t *out, uint8_t *in, size_t length) {
+  while (length > 0) {
+    uint8_t high_nibble, low_nibble;
+    if (!hex_char_to_nibble(in[0], &high_nibble)
+        || !hex_char_to_nibble(in[1], &low_nibble)) {
+      return false;
+    }
+    *out = (high_nibble << 4) | low_nibble;
+    in += 2;
+    out += 1;
+    length -= 1;
+  }
+  return true;
+}
+
+/**
  * Runs an application at the specified address. Should not return under normal
  * circumstances.
  */
@@ -133,48 +106,111 @@ void runApp(void* addr) {
   target();
 }
 
+uint8_t process_bootloader_command(ISPBase &isp, I2C &i2c, uint8_t* cmd, size_t length) {
+  uint8_t i2cData[BLPROTO::MAX_PAYLOAD_LEN];
 
-// TODO FIX THIS and make this not awful global state
-void* app_write_ptr = &_FlashEnd;
-
-uint8_t process_bootloader_command(ISPBase &isp, uint8_t* cmd, size_t length) {
   if (cmd[0] == 'W') {
-    size_t data_length = length - 1;
+    size_t data_length = length - 17;
     if (data_length % 2 != 0) {
       return 127; // not byte aligned
     }
     data_length = data_length / 2;
 
-    // translate ASCII hex cmd into raw bytes
-    uint8_t* data_str = cmd + 1;
-    uint8_t* data_bytes = cmd;
-
-    for (size_t data_ind=0; data_ind<data_length; data_ind++) {
-      uint8_t high_nibble, low_nibble;
-      if (!hex_char_to_nibble(data_str[0], &high_nibble)
-          || !hex_char_to_nibble(data_str[1], &low_nibble)) {
-        return 126;
-      }
-      *data_bytes = (high_nibble << 4) | low_nibble;
-      data_str += 2;
-      data_bytes += 1;
+    if (!ascii_hex_to_uint8_array(cmd, cmd+1, 2)) {
+      return 125;
     }
-    uint8_t rtn = isp.write(app_write_ptr, cmd, data_length);
-    app_write_ptr += data_length;
-    return rtn;
+    uint16_t device = deserialize_uint16(cmd) - 1;
+
+    if (!ascii_hex_to_uint8_array(cmd, cmd+5, 4)) {
+      return 124;
+    }
+    uint32_t addr = deserialize_uint32(cmd);
+
+    if (!ascii_hex_to_uint8_array(cmd, cmd+13, 2)) {
+      return 123;
+    }
+    uint16_t crc = deserialize_uint16(cmd);
+
+    if (!ascii_hex_to_uint8_array(cmd, cmd+17, data_length)) {
+      return 126;
+    }
+
+    uart.printf("I2C Write %x: ptr 0x% 8x, crc 0x% 4x, len %i  ", device, addr, crc, data_length);
+
+    i2cData[0] = BLPROTO::CMD_WRITE;
+    serialize_uint32(i2cData+1, addr);
+    serialize_uint16(i2cData+5, (uint16_t)data_length);
+    serialize_uint16(i2cData+7, crc);
+    for (size_t i=0; i<data_length; i++) {
+      i2cData[i+9] = cmd[i];
+    }
+
+    i2c.write(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, data_length + 9);
+
+    uint8_t resp = BLPROTO::RESP_STATUS_BUSY;
+    while (resp == BLPROTO::RESP_STATUS_BUSY) {
+      i2c.frequency(I2C_FREQUENCY); // reset the I2C device
+      i2cData[0] = BLPROTO::CMD_STATUS;
+      i2c.write(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, 1);
+      i2c.read(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, 1);
+      resp = i2cData[0];
+    }
+
+    return resp;
+  } else if (cmd[0] == 'E') {
+    if (!ascii_hex_to_uint8_array(cmd, cmd+1, 2)) {
+      return 125;
+    }
+    uint16_t device = deserialize_uint16(cmd) - 1;
+
+    if (!ascii_hex_to_uint8_array(cmd, cmd+5, 4)) {
+      return 124;
+    }
+    uint32_t addr = deserialize_uint32(cmd);
+
+    if (!ascii_hex_to_uint8_array(cmd, cmd+13, 4)) {
+      return 123;
+    }
+    uint32_t length = deserialize_uint32(cmd);
+
+    i2cData[0] = BLPROTO::CMD_ERASE;
+    serialize_uint32(i2cData+1, addr);
+    serialize_uint32(i2cData+5, length);
+
+    i2c.write(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, 9);
+
+    uint8_t resp = BLPROTO::RESP_STATUS_BUSY;
+    while (resp == BLPROTO::RESP_STATUS_BUSY) {
+      i2c.frequency(I2C_FREQUENCY); // reset the I2C device
+      i2cData[0] = BLPROTO::CMD_STATUS;
+      i2c.write(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, 1);
+      i2c.read(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, 1);
+      resp = i2cData[0];
+    }
+
+    return resp;
   } else if (cmd[0] == 'J') {
-    runApp(APP_BEGIN_PTR);
-    return 63;
+    if (!ascii_hex_to_uint8_array(cmd, cmd+1, 2)) {
+      return 125;
+    }
+    uint16_t device = deserialize_uint16(cmd) - 1;
+
+    if (!ascii_hex_to_uint8_array(cmd, cmd+5, 4)) {
+      return 124;
+    }
+    uint32_t addr = deserialize_uint32(cmd);
+
+    i2cData[0] = BLPROTO::CMD_JUMP;
+    serialize_uint32(i2cData+1, (uint32_t)APP_BEGIN_PTR);
+
+    i2c.write(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, 5);
+    return 0;
   } else {  // unknown command
-    return 125;
+    return 63;
   }
 }
 
 int bootloaderMaster() {
-  Serial uart(SERIAL_TX, SERIAL_RX);
-  uart.baud(115200);
-  uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ ")\r\n");
-
   F303K8ISP isp;
   uart.printf("Device ID: 0x% 8x, Device Serial: 0x% 8x\r\n",
       isp.get_device_id(), isp.get_device_serial());
@@ -182,8 +218,6 @@ int bootloaderMaster() {
       (uint32_t)BL_BEGIN_PTR, (uint32_t)APP_BEGIN_PTR);
   uart.printf("Flash unlock: %i\r\n",
       isp.isp_begin());
-  uart.printf("Flash erase: %i\r\n",
-      isp.erase(APP_BEGIN_PTR, 32768));
 
   I2C i2c(D4, D5);
   uint8_t i2cData[BLPROTO::MAX_PAYLOAD_LEN];
@@ -219,24 +253,7 @@ int bootloaderMaster() {
     numDevices += 1;
   }
 
-  i2cData[0] = BLPROTO::CMD_ERASE;
-  serialize_uint32(i2cData+1, (uint32_t)APP_BEGIN_PTR);
-  serialize_uint32(i2cData+5, 16384);
-
-  i2c.write(BLPROTO::DEVICE_ADDR(1), (char*)i2cData, 9);
-
-  uint8_t resp = BLPROTO::RESP_STATUS_BUSY;
-  uint8_t status;
-  while (resp == BLPROTO::RESP_STATUS_BUSY) {
-    i2c.frequency(I2C_FREQUENCY); // reset the I2C device
-    i2cData[0] = BLPROTO::CMD_STATUS;
-    i2c.write(BLPROTO::DEVICE_ADDR(1), (char*)i2cData, 1);
-    i2c.read(BLPROTO::DEVICE_ADDR(1), (char*)i2cData, 2);
-    resp = i2cData[0];
-    status = i2cData[1];
-  }
-
-  uart.printf("Status <- %i\n", status);
+  uart.printf("Discovered %i devices\n", numDevices);
 
   statusLED.setIdlePolarity(true);
 
@@ -244,7 +261,7 @@ int bootloaderMaster() {
   uint32_t nextHeartbeatTime = 0;
   heartbeatTimer.start();
 
-  const size_t RPC_BUFSIZE = 4096;
+  const size_t RPC_BUFSIZE = 1024;
   static char rpc_inbuf[RPC_BUFSIZE], rpc_outbuf[RPC_BUFSIZE];
   char* rpc_inptr = rpc_inbuf;  // next received byte pointer
 
@@ -253,7 +270,8 @@ int bootloaderMaster() {
       char rx = uart.getc();
       if (rx == '\n' || rx == '\r') {
         *rpc_inptr = '\0';  // optionally append the string terminator
-        uint8_t rtn = process_bootloader_command(isp, (uint8_t*)rpc_inbuf, rpc_inptr - rpc_inbuf);
+        uint8_t rtn = process_bootloader_command(isp, i2c,
+            (uint8_t*)rpc_inbuf, rpc_inptr - rpc_inbuf);
         uart.printf("D%i\n", rtn);
         rpc_inptr = rpc_inbuf;  // reset the received byte pointer
       } else {
@@ -277,10 +295,6 @@ int bootloaderMaster() {
 }
 
 int bootloaderSlaveInit() {
-  Serial uart(SERIAL_TX, SERIAL_RX);
-  uart.baud(115200);
-  uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ ")\r\n");
-
   statusLED.setIdlePolarity(false);
 
   Timer heartbeatTimer;
@@ -357,26 +371,33 @@ int bootloaderSlaveInit() {
       NVIC_SystemReset();
     }
 
-    isp.async_update();
+    if (isp.async_update()) {
+      statusLED.pulse(LED_PULSE_TIME);
+    }
 
     switch (i2c.receive()) {
     case I2CSlave::ReadAddressed:
+      statusLED.pulse(LED_PULSE_TIME);
       if (lastI2CCommand == BLPROTO::CMD_PING) {
         i2c.write(BLPROTO::RESP_PING);
       } else if (lastI2CCommand == BLPROTO::CMD_STATUS) {
         uint8_t status;
         if (isp.get_last_async_status(&status)) {
-          i2c.write(BLPROTO::RESP_STATUS_DONE);
-          i2c.write(status);
+          if (status == 0) {
+            i2c.write(BLPROTO::RESP_STATUS_DONE);
+          } else {
+            // TODO: differentiate argcheck / other error reporting
+            i2c.write(BLPROTO::RESP_STATUS_ERR_FLASH);
+          }
         } else {
           i2c.write(BLPROTO::RESP_STATUS_BUSY);
-          i2c.write(0xff);
         }
       } else {
         // Drop everything else
       }
       break;
     case I2CSlave::WriteAddressed:
+      statusLED.pulse(LED_PULSE_TIME);
       lastI2CCommand = i2c.read();
       if (lastI2CCommand == BLPROTO::CMD_SET_BOOTOUT) {
         bootOutPin = 1;
@@ -385,6 +406,22 @@ int bootloaderSlaveInit() {
           uint32_t startAddr = deserialize_uint32(i2cData+0);
           uint32_t len = deserialize_uint32(i2cData+4);
           isp.async_erase((void*)startAddr, len);
+        } else {
+          // TODO: better error handling
+        }
+      } else if (lastI2CCommand == BLPROTO::CMD_WRITE) {
+        if (!i2c.read((char*)i2cData, 8)) {
+          uint32_t startAddr = deserialize_uint32(i2cData+0);
+          uint16_t len = deserialize_uint16(i2cData+4);
+          uint16_t crc = deserialize_uint16(i2cData+6);
+          // TODO: allow len >= 256 transfers by breaking i2c read calls into
+          // smaller chunks
+          if (!i2c.read((char*)i2cData, len)) {
+            // TODO: CRC check
+            isp.async_write((void*)startAddr, i2cData, len);
+          } else {
+            // TODO: better error handling
+          }
         } else {
           // TODO: better error handling
         }
@@ -410,6 +447,9 @@ int bootloaderSlaveInit() {
 
 int main() {
   bootOutPin = 0;
+
+  uart.baud(115200);
+  uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ ")\r\n");
 
   wait_ms(BLPROTO::DELAY_MS_BOOTSCAN);  // wait for some time to let boot in stabilize
 

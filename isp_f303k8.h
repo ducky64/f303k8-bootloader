@@ -56,16 +56,19 @@ public:
     return status;
   }
 
-  void async_update() {
+  bool async_update() {
+    if (async_op == OP_NONE) {
+      return false;
+    }
     if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_BSY)) {
-      return;
+      return true;
     }
     if (async_op == OP_ERASE) {
       if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_WRPERR) || __HAL_FLASH_GET_FLAG(FLASH_FLAG_PGERR)) {
         CLEAR_BIT(FLASH->CR, FLASH_CR_PER);
         async_op = OP_NONE;
         async_status = 1;
-        return;
+        return false;
       }
 
       if (async_length_remaining > 0) {
@@ -73,17 +76,19 @@ public:
 
         async_addr_current += ERASE_SIZE;
         async_length_remaining -= ERASE_SIZE;
+        return true;
       } else {
         CLEAR_BIT(FLASH->CR, FLASH_CR_PER);
         async_op = OP_NONE;
         async_status = 0;
+        return false;
       }
     } else if (async_op == OP_WRITE) {
       if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_WRPERR) || __HAL_FLASH_GET_FLAG(FLASH_FLAG_PGERR)) {
         CLEAR_BIT(FLASH->CR, FLASH_CR_PG);
         async_op = OP_NONE;
         async_status = 1;
-        return;
+        return false;
       }
 
       if (async_length_remaining > 0) {
@@ -100,10 +105,12 @@ public:
         async_addr_current += WRITE_SIZE;
         async_data_ptr += WRITE_SIZE;
         async_length_remaining -= WRITE_SIZE;
+        return true;
       } else {
         CLEAR_BIT(FLASH->CR, FLASH_CR_PG);
         async_op = OP_NONE;
         async_status = 0;
+        return false;
       }
     }
   }
