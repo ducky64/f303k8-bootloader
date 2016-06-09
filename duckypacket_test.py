@@ -21,6 +21,10 @@ class TestPacketization(unittest.TestCase):
     self.assertEquals(b'\x00\x00\x00\x00', packet.get_bytes())
 
     packet = PacketBuilder()
+    packet.put_bytes(b'\xab\xad\xca\xfe', 4)
+    self.assertEquals(b'\xab\xad\xca\xfe', packet.get_bytes())
+
+    packet = PacketBuilder()
     packet.put_uint8(0x42)
     packet.put_uint8(0xff)
     packet.put_uint32(0xdeadbeef)
@@ -41,6 +45,10 @@ class TestPacketization(unittest.TestCase):
 
     packet = PacketReader(b'\x00\x00\x00\x00')
     self.assertEquals(0.0, packet.read_float())
+    self.assertTrue(packet.empty())
+
+    packet = PacketReader(b'\xab\xad\xca\xfe')
+    self.assertEquals(b'\xab\xad\xca\xfe', packet.read_bytes(4))
     self.assertTrue(packet.empty())
 
     packet = PacketReader(b'\x42\xff\xde\xad\xbe\xef')

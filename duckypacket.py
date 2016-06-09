@@ -10,6 +10,15 @@ class PacketBuilder(object):
     """
     self.bytes = bytearray()
 
+  def put_bytes(self, bytes, length):
+    """Append some bytes to the end of this packet, checking the length against
+    the expected length.
+    """
+    bytes = bytearray(bytes)
+    if len(bytes) != length:
+      raise ValueError("Input bytes of length %i != expected length %i" % (len(bytes), length))
+    self.bytes.extend(bytes)
+
   def put_uint8(self, value):
     """Append a 8-bit integer to the end of this packet.
     """
@@ -55,6 +64,9 @@ class PacketReader(object):
     self.bytes = bytearray(data)
 
   def read_bytes(self, num_bytes):
+    """Read some number of bytes from the beginning of the packet, then advance
+    the packet past the read data.
+    """
     if num_bytes > len(self.bytes):
       raise PacketUnderrunError("Requested %i bytes of %i bytes left" % (num_bytes, len(self.bytes)))
     out = self.bytes[:num_bytes]
