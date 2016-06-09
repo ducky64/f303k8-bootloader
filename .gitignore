@@ -33,6 +33,9 @@
 .pydevproject
 .settings
 
+# Python
+__pycache__
+
 # SCons
 .sconsign.dblite
 build/
