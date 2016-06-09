@@ -5,6 +5,7 @@ from duckycobs import *
 class TestCOBSEncode(unittest.TestCase):
   def check_encode_decode(self, in_bytearray):
     encoded = cobs_encode(in_bytearray)
+    self.assertTrue(encoded.find(b'\x00') < 0, "Must not have 0x00 in encoded bytes")
     self.assertEqual(in_bytearray, cobs_decode(encoded),
                      "failed: %s -> %s" % (in_bytearray, encoded))
 
