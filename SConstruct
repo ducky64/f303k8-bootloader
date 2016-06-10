@@ -28,7 +28,7 @@ env['PROGSUFFIX'] = '.elf'
 ###
 ### Platform-specific build targets for mbed libraries
 ###
-env.Append(CCFLAGS = '-O3')
+env.Append(CCFLAGS = '-Os')
 
 SConscript('mbed-scons/targets/SConscript-mbed-env-stm32f303k8', exports='env',
            duplicate=0)
