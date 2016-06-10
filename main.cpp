@@ -116,45 +116,45 @@ void runApp(void* addr) {
   // target();
 }
 
-BLPROTO::RESP_STATUS blstatus_from_ispstatus(ISPBase::ISPStatus status) {
-  if (status == ISPBase::OK) {
-    return BLPROTO::DONE;
-  } else if (status == ISPBase::ERR_INVALID_ARGS) {
-    return BLPROTO::ERR_INVALID_ARGS;
-  } else if (status == ISPBase::ERR_FLASH) {
-    return BLPROTO::ERR_FLASH;
+BootProto::RespStatus blstatus_from_ispstatus(ISPBase::ISPStatus status) {
+  if (status == ISPBase::kISPOk) {
+    return BootProto::kRespDone;
+  } else if (status == ISPBase::kISPInvalidArgs) {
+    return BootProto::kRespInvalidArgs;
+  } else if (status == ISPBase::kISPFlashError) {
+    return BootProto::kRespFlashError;
   } else {
-    return BLPROTO::ERR_UNKNOWN;
+    return BootProto::kRespUnknownError;
   }
 }
 
-BLPROTO::RESP_STATUS process_bootloader_command(ISPBase &isp, I2C &i2c, uint8_t* cmd, size_t length) {
-  uint8_t i2cData[BLPROTO::MAX_PAYLOAD_LEN];
+BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, uint8_t* cmd, size_t length) {
+  uint8_t i2cData[BootProto::kMaxPayloadLength];
 
   if (cmd[0] == 'W') {
     size_t data_length = length - 21;
     if (data_length % 2 != 0) {
-      return BLPROTO::ERR_INVALID_FORMAT; // not byte aligned
+      return BootProto::kRespInvalidFormat; // not byte aligned
     }
     data_length = data_length / 2;
 
     if (!ascii_hex_to_uint8_array(cmd, cmd+1, 2)) {
-      return BLPROTO::ERR_INVALID_FORMAT;
+      return BootProto::kRespInvalidFormat;
     }
     uint16_t device = deserialize_uint16(cmd);
 
     if (!ascii_hex_to_uint8_array(cmd, cmd+5, 4)) {
-      return BLPROTO::ERR_INVALID_FORMAT;
+      return BootProto::kRespInvalidFormat;
     }
     uint32_t addr = deserialize_uint32(cmd);
 
     if (!ascii_hex_to_uint8_array(cmd, cmd+13, 4)) {
-      return BLPROTO::ERR_INVALID_FORMAT;
+      return BootProto::kRespInvalidFormat;
     }
     uint32_t crc = deserialize_uint32(cmd);
 
     if (!ascii_hex_to_uint8_array(cmd, cmd+21, data_length)) {
-      return BLPROTO::ERR_INVALID_FORMAT;
+      return BootProto::kRespInvalidFormat;
     }
 
 //    uart.printf("I2C Write %x: ptr 0x% 8x, crc 0x% 8x / 0x% 8x, len %i  ", device, addr, crc,computed_crc, data_length);
@@ -162,7 +162,7 @@ BLPROTO::RESP_STATUS process_bootloader_command(ISPBase &isp, I2C &i2c, uint8_t*
     if (device > 0) {
       device = device - 1;
 
-      i2cData[0] = BLPROTO::CMD_WRITE;
+      i2cData[0] = BootProto::kCmdWrite;
       serialize_uint32(i2cData+1, addr);
       serialize_uint16(i2cData+5, (uint16_t)data_length);
       serialize_uint32(i2cData+7, crc);
@@ -170,15 +170,15 @@ BLPROTO::RESP_STATUS process_bootloader_command(ISPBase &isp, I2C &i2c, uint8_t*
         i2cData[i+11] = cmd[i];
       }
 
-      i2c.write(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, data_length +11);
+      i2c.write(BootProto::GetDeviceAddr(device), (char*)i2cData, data_length +11);
 
-      BLPROTO::RESP_STATUS resp = BLPROTO::BUSY;
-      while (resp == BLPROTO::BUSY) {
+      BootProto::RespStatus resp = BootProto::kRespBusy;
+      while (resp == BootProto::kRespBusy) {
         i2c.frequency(I2C_FREQUENCY); // reset the I2C device
-        i2cData[0] = BLPROTO::CMD_STATUS;
-        i2c.write(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, 1);
-        i2c.read(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, 1);
-        resp = (BLPROTO::RESP_STATUS)i2cData[0];
+        i2cData[0] = BootProto::kCmdStatus;
+        i2c.write(BootProto::GetDeviceAddr(device), (char*)i2cData, 1);
+        i2c.read(BootProto::GetDeviceAddr(device), (char*)i2cData, 1);
+        resp = (BootProto::RespStatus)i2cData[0];
       }
       return resp;
     } else {
@@ -186,36 +186,36 @@ BLPROTO::RESP_STATUS process_bootloader_command(ISPBase &isp, I2C &i2c, uint8_t*
     }
   } else if (cmd[0] == 'E') {
     if (!ascii_hex_to_uint8_array(cmd, cmd+1, 2)) {
-      return BLPROTO::ERR_INVALID_FORMAT;
+      return BootProto::kRespInvalidFormat;
     }
     uint16_t device = deserialize_uint16(cmd);
 
     if (!ascii_hex_to_uint8_array(cmd, cmd+5, 4)) {
-      return BLPROTO::ERR_INVALID_FORMAT;
+      return BootProto::kRespInvalidFormat;
     }
     uint32_t addr = deserialize_uint32(cmd);
 
     if (!ascii_hex_to_uint8_array(cmd, cmd+13, 4)) {
-      return BLPROTO::ERR_INVALID_FORMAT;
+      return BootProto::kRespInvalidFormat;
     }
     uint32_t length = deserialize_uint32(cmd);
 
     if (device > 0) {
       device = device - 1;
 
-      i2cData[0] = BLPROTO::CMD_ERASE;
+      i2cData[0] = BootProto::kCmdErase;
       serialize_uint32(i2cData+1, addr);
       serialize_uint32(i2cData+5, length);
 
-      i2c.write(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, 9);
+      i2c.write(BootProto::GetDeviceAddr(device), (char*)i2cData, 9);
 
-      BLPROTO::RESP_STATUS resp = BLPROTO::BUSY;
-      while (resp == BLPROTO::BUSY) {
+      BootProto::RespStatus resp = BootProto::kRespBusy;
+      while (resp == BootProto::kRespBusy) {
         i2c.frequency(I2C_FREQUENCY); // reset the I2C device
-        i2cData[0] = BLPROTO::CMD_STATUS;
-        i2c.write(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, 1);
-        i2c.read(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, 1);
-        resp = (BLPROTO::RESP_STATUS)i2cData[0];
+        i2cData[0] = BootProto::kCmdStatus;
+        i2c.write(BootProto::GetDeviceAddr(device), (char*)i2cData, 1);
+        i2c.read(BootProto::GetDeviceAddr(device), (char*)i2cData, 1);
+        resp = (BootProto::RespStatus)i2cData[0];
       }
       return resp;
     } else {
@@ -223,28 +223,28 @@ BLPROTO::RESP_STATUS process_bootloader_command(ISPBase &isp, I2C &i2c, uint8_t*
     }
   } else if (cmd[0] == 'J') {
     if (!ascii_hex_to_uint8_array(cmd, cmd+1, 2)) {
-      return BLPROTO::ERR_INVALID_FORMAT;
+      return BootProto::kRespInvalidFormat;
     }
     uint16_t device = deserialize_uint16(cmd);
 
     if (!ascii_hex_to_uint8_array(cmd, cmd+5, 4)) {
-      return BLPROTO::ERR_INVALID_FORMAT;
+      return BootProto::kRespInvalidFormat;
     }
     uint32_t addr = deserialize_uint32(cmd);
 
     if (device > 0) {
       device = device - 1;
-      i2cData[0] = BLPROTO::CMD_JUMP;
+      i2cData[0] = BootProto::kCmdRunApp;
       serialize_uint32(i2cData+1, (uint32_t)APP_BEGIN_PTR);
 
-      i2c.write(BLPROTO::DEVICE_ADDR(device), (char*)i2cData, 5);
+      i2c.write(BootProto::GetDeviceAddr(device), (char*)i2cData, 5);
     } else {
       runApp((void*)addr);
     }
 
-    return BLPROTO::DONE;
+    return BootProto::kRespDone;
   } else {  // unknown command
-    return BLPROTO::ERR_INVALID_FORMAT;
+    return BootProto::kRespInvalidFormat;
   }
 }
 
@@ -258,7 +258,7 @@ int bootloaderMaster() {
       isp.isp_begin());
 
   I2C i2c(D4, D5);
-  uint8_t i2cData[BLPROTO::MAX_PAYLOAD_LEN];
+  uint8_t i2cData[BootProto::kMaxPayloadLength];
 
   i2c.frequency(I2C_FREQUENCY);
 
@@ -268,24 +268,24 @@ int bootloaderMaster() {
   uint8_t numDevices = 0;
 
   while (1) {
-    wait_ms(BLPROTO::DELAY_MS_BOOT_TO_ADDR);
+    wait_ms(BootProto::kBootToAddrDelayMs);
 
     i2c.frequency(I2C_FREQUENCY); // reset the I2C device
-    i2cData[0] = BLPROTO::CMD_PING;
-    if (i2c.write(BLPROTO::ADDRESS_GLOBAL, (char*)i2cData, 1, true) != 0) {
+    i2cData[0] = BootProto::kCmdPing;
+    if (i2c.write(BootProto::kAddressGlobal, (char*)i2cData, 1, true) != 0) {
       // Next device in chain didn't respond to ping, reached end of chain
       break;
     }
-    i2c.read(BLPROTO::ADDRESS_GLOBAL, (char*)i2cData, 1);
+    i2c.read(BootProto::kAddressGlobal, (char*)i2cData, 1);
     // TODO: better I2C robustness, like if device doesn't respond
-    if (i2cData[0] != BLPROTO::RESP_PING) { break; }
+    if (i2cData[0] != BootProto::kRespDone) { break; }
 
-    uint8_t thisDeviceAddress = BLPROTO::DEVICE_ADDR(numDevices);
-    i2cData[0] = BLPROTO::CMD_SET_ADDRESS;
+    uint8_t thisDeviceAddress = BootProto::GetDeviceAddr(numDevices);
+    i2cData[0] = BootProto::kCmdSetAddress;
     i2cData[1] = thisDeviceAddress;
-    i2c.write(BLPROTO::ADDRESS_GLOBAL, (char*)i2cData, 2);
+    i2c.write(BootProto::kAddressGlobal, (char*)i2cData, 2);
 
-    i2cData[0] = BLPROTO::CMD_SET_BOOTOUT;
+    i2cData[0] = BootProto::kCmdSetBootOut;
     i2c.write(thisDeviceAddress, (char*)i2cData, 1);
 
     numDevices += 1;
@@ -356,28 +356,28 @@ int bootloaderSlaveInit() {
 
   I2CSlave i2c(D4, D5);
   i2c.frequency(I2C_FREQUENCY);
-  i2c.address(BLPROTO::ADDRESS_GLOBAL);
-  uint8_t address = BLPROTO::ADDRESS_GLOBAL;
+  i2c.address(BootProto::kAddressGlobal);
+  uint8_t address = BootProto::kAddressGlobal;
 
   uint8_t lastI2CCommand = 0;
 
   // Wait for initialization I2C command to get address
-  while (address == BLPROTO::ADDRESS_GLOBAL) {
+  while (address == BootProto::kAddressGlobal) {
     if (bootInPin == 0) {
       NVIC_SystemReset();
     }
 
     switch (i2c.receive()) {
     case I2CSlave::ReadAddressed:
-      if (lastI2CCommand == BLPROTO::CMD_PING) {
-        i2c.write(BLPROTO::RESP_PING);
+      if (lastI2CCommand == BootProto::kCmdPing) {
+        i2c.write(BootProto::kRespDone);
       } else {
         // Drop everything else
       }
       break;
     case I2CSlave::WriteAddressed:
       lastI2CCommand = i2c.read();
-      if (lastI2CCommand == BLPROTO::CMD_SET_ADDRESS) {
+      if (lastI2CCommand == BootProto::kCmdSetAddress) {
         uint8_t payload = i2c.read();
         if (payload != -1) {
           address = payload;
@@ -400,9 +400,9 @@ int bootloaderSlaveInit() {
   F303K8ISP isp;
   isp.isp_begin();
 
-  uint8_t i2cData[BLPROTO::MAX_PAYLOAD_LEN];
+  uint8_t i2cData[BootProto::kMaxPayloadLength];
   // Override status. DONE means to read from ISP status.
-  BLPROTO::RESP_STATUS lastStatus = BLPROTO::DONE;
+  BootProto::RespStatus lastStatus = BootProto::kRespDone;
 
   // Main bootloader loop
   while (1) {
@@ -417,15 +417,15 @@ int bootloaderSlaveInit() {
     switch (i2c.receive()) {
     case I2CSlave::ReadAddressed:
       statusLED.pulse(LED_PULSE_TIME);
-      if (lastI2CCommand == BLPROTO::CMD_PING) {
-        i2c.write(BLPROTO::RESP_PING);
-      } else if (lastI2CCommand == BLPROTO::CMD_STATUS) {
-        if (lastStatus == BLPROTO::DONE) {
+      if (lastI2CCommand == BootProto::kCmdPing) {
+        i2c.write(BootProto::kRespDone);
+      } else if (lastI2CCommand == BootProto::kCmdStatus) {
+        if (lastStatus == BootProto::kRespDone) {
           ISPBase::ISPStatus ispStatus;
           if (isp.get_last_async_status(&ispStatus)) {
             i2c.write(blstatus_from_ispstatus(ispStatus));
           } else {
-            i2c.write(BLPROTO::BUSY);
+            i2c.write(BootProto::kRespBusy);
           }
         } else {
           i2c.write(lastStatus);
@@ -439,18 +439,18 @@ int bootloaderSlaveInit() {
     case I2CSlave::WriteAddressed:
       statusLED.pulse(LED_PULSE_TIME);
       lastI2CCommand = i2c.read();
-      if (lastI2CCommand == BLPROTO::CMD_SET_BOOTOUT) {
+      if (lastI2CCommand == BootProto::kCmdSetBootOut) {
         bootOutPin = 1;
-      } else if (lastI2CCommand == BLPROTO::CMD_ERASE) {
+      } else if (lastI2CCommand == BootProto::kCmdErase) {
         if (!i2c.read((char*)i2cData, 8)) {
           uint32_t startAddr = deserialize_uint32(i2cData+0);
           uint32_t len = deserialize_uint32(i2cData+4);
           isp.async_erase((void*)startAddr, len);
-          lastStatus = BLPROTO::DONE;
+          lastStatus = BootProto::kRespDone;
         } else {
-          lastStatus = BLPROTO::ERR_INVALID_FORMAT;
+          lastStatus = BootProto::kRespInvalidFormat;
         }
-      } else if (lastI2CCommand == BLPROTO::CMD_WRITE) {
+      } else if (lastI2CCommand == BootProto::kCmdWrite) {
         if (!i2c.read((char*)i2cData, 10)) {
           uint32_t startAddr = deserialize_uint32(i2cData+0);
           uint16_t len = deserialize_uint16(i2cData+4);
@@ -461,17 +461,17 @@ int bootloaderSlaveInit() {
             uint32_t computed_crc = CRC32::compute_crc(i2cData, len);
             if (computed_crc == crc) {
               isp.async_write((void*)startAddr, i2cData, len);
-              lastStatus = BLPROTO::DONE;
+              lastStatus = BootProto::kRespDone;
             } else {
-              lastStatus = BLPROTO::ERR_INVALID_CHECKSUM;
+              lastStatus = BootProto::kRespInvalidChecksum;
             }
           } else {
-            lastStatus = BLPROTO::ERR_INVALID_FORMAT;
+            lastStatus = BootProto::kRespInvalidFormat;
           }
         } else {
-          lastStatus = BLPROTO::ERR_INVALID_FORMAT;
+          lastStatus = BootProto::kRespInvalidFormat;
         }
-      } else if (lastI2CCommand == BLPROTO::CMD_JUMP) {
+      } else if (lastI2CCommand == BootProto::kCmdRunApp) {
         if (!i2c.read((char*)i2cData, 4)) {
           uint32_t addr = deserialize_uint32(i2cData);
           isp.isp_end();
@@ -499,10 +499,10 @@ int main() {
   uart_in.baud(115200);
   uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ ")\r\n");
 
-  wait_ms(BLPROTO::DELAY_MS_BOOTSCAN);  // wait for some time to let boot in stabilize
+  wait_ms(BootProto::kBootscanDelayMs);  // wait for some time to let boot in stabilize
 
   if (bootInPin == 1) {
-    wait_ms(BLPROTO::DELAY_MS_BOOTSCAN);
+    wait_ms(BootProto::kBootscanDelayMs);
     return bootloaderMaster();
   } else {
     return bootloaderSlaveInit();

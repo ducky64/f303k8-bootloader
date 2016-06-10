@@ -67,7 +67,7 @@ public:
       if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_WRPERR) || __HAL_FLASH_GET_FLAG(FLASH_FLAG_PGERR)) {
         CLEAR_BIT(FLASH->CR, FLASH_CR_PER);
         async_op = OP_NONE;
-        async_status = ERR_FLASH;
+        async_status = kISPFlashError;
         return false;
       }
 
@@ -80,14 +80,14 @@ public:
       } else {
         CLEAR_BIT(FLASH->CR, FLASH_CR_PER);
         async_op = OP_NONE;
-        async_status = OK;
+        async_status = kISPOk;
         return false;
       }
     } else if (async_op == OP_WRITE) {
       if (__HAL_FLASH_GET_FLAG(FLASH_FLAG_WRPERR) || __HAL_FLASH_GET_FLAG(FLASH_FLAG_PGERR)) {
         CLEAR_BIT(FLASH->CR, FLASH_CR_PG);
         async_op = OP_NONE;
-        async_status = ERR_FLASH;
+        async_status = kISPFlashError;
         return false;
       }
 
@@ -109,7 +109,7 @@ public:
       } else {
         CLEAR_BIT(FLASH->CR, FLASH_CR_PG);
         async_op = OP_NONE;
-        async_status = OK;
+        async_status = kISPOk;
         return false;
       }
     }
@@ -124,22 +124,22 @@ public:
     if (async_op != OP_NONE) {
       return false;
     }
-    async_status = OK;
+    async_status = kISPOk;
 
     if (length % ERASE_SIZE != 0) {
-      async_status = ERR_INVALID_ARGS;
+      async_status = kISPInvalidArgs;
     }
     size_t addr = (uint32_t)start_addr;
     if (addr % ERASE_SIZE != 0) {
-      async_status = ERR_INVALID_ARGS;
+      async_status = kISPInvalidArgs;
     }
     if (!(addr >= FLASH_START && addr <= FLASH_END)) {
-      async_status = ERR_INVALID_ARGS;
+      async_status = kISPInvalidArgs;
     }
     if (addr + length > FLASH_END + 1) {
-      async_status = ERR_INVALID_ARGS;
+      async_status = kISPInvalidArgs;
     }
-    if (async_status != OK) {
+    if (async_status != kISPOk) {
       return true;
     }
 
@@ -160,16 +160,16 @@ public:
     }
 
     if (length % WRITE_SIZE != 0) {
-      async_status = ERR_INVALID_ARGS;
+      async_status = kISPInvalidArgs;
     }
     size_t addr = (uint32_t)start_addr;
     if (addr % WRITE_SIZE != 0) {
-      async_status = ERR_INVALID_ARGS;
+      async_status = kISPInvalidArgs;
     }
     if (!(addr >= FLASH_START && addr <= FLASH_END)) {
-      async_status = ERR_INVALID_ARGS;
+      async_status = kISPInvalidArgs;
     }
-    if (async_status != OK) {
+    if (async_status != kISPOk) {
       return true;
     }
 

@@ -4,9 +4,9 @@
 class ISPBase {
 public:
   enum ISPStatus {
-    OK = 0x00,
-    ERR_INVALID_ARGS = 0x10,
-    ERR_FLASH
+    kISPOk = 0x00,
+    kISPInvalidArgs = 0x10,
+    kISPFlashError
   };
 
   /**
