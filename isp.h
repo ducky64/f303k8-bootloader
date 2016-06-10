@@ -62,7 +62,7 @@ public:
   /**
    * During an async operation, this must be called periodically.
    *
-   * Return true of currently busy.
+   * Return true if currently busy.
    */
   virtual bool async_update() = 0;
 

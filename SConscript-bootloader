@@ -22,6 +22,10 @@ env.Append(LINKFLAGS=[
 ])
 
 # Top-level build flow
+env = env.Clone()
+env['CCFLAGS'].remove('-w')
+env.Append(CCFLAGS = ['-Werror', '-Wall'])
+
 bootloader = env.Program(
   target = '../bootloader',
   source = Glob('*.cpp'),

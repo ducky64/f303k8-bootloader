@@ -4,11 +4,11 @@
 #define ISP_F303K8_H_
 
 class F303K8ISP : public ISPBase {
-protected:
-  const size_t FLASH_START = 0x8000000;
-  const size_t FLASH_END = 0x800ffff;
-  const size_t ERASE_SIZE = 2048;
-  const size_t WRITE_SIZE = 2;
+private:
+  const static size_t kFlashStartAddr = 0x8000000;
+  const static size_t kFlashEndAddr = 0x800ffff;
+  const static size_t kEraseSize = 2048;
+  const static size_t kWriteSize = 2;
 
 public:
   F303K8ISP() : async_op(OP_NONE) {
@@ -31,11 +31,11 @@ public:
   }
 
   size_t get_erase_size() {
-    return ERASE_SIZE;
+    return kEraseSize;
   }
 
   size_t get_write_size() {
-    return WRITE_SIZE;
+    return kWriteSize;
   }
 
   ISPStatus erase(void* start_addr, size_t length) {
@@ -74,8 +74,8 @@ public:
       if (async_length_remaining > 0) {
         FLASH_PageErase(async_addr_current);
 
-        async_addr_current += ERASE_SIZE;
-        async_length_remaining -= ERASE_SIZE;
+        async_addr_current += kEraseSize;
+        async_length_remaining -= kEraseSize;
         return true;
       } else {
         CLEAR_BIT(FLASH->CR, FLASH_CR_PER);
@@ -102,9 +102,9 @@ public:
 
         FLASH_Program_HalfWord(async_addr_current, halfword);
 
-        async_addr_current += WRITE_SIZE;
-        async_data_ptr += WRITE_SIZE;
-        async_length_remaining -= WRITE_SIZE;
+        async_addr_current += kWriteSize;
+        async_data_ptr += kWriteSize;
+        async_length_remaining -= kWriteSize;
         return true;
       } else {
         CLEAR_BIT(FLASH->CR, FLASH_CR_PG);
@@ -112,6 +112,9 @@ public:
         async_status = kISPOk;
         return false;
       }
+    } else {
+      // This shouldn't happen, so make it fail obviously when it does.
+      return false;
     }
   }
 
@@ -126,17 +129,17 @@ public:
     }
     async_status = kISPOk;
 
-    if (length % ERASE_SIZE != 0) {
+    if (length % kEraseSize != 0) {
       async_status = kISPInvalidArgs;
     }
     size_t addr = (uint32_t)start_addr;
-    if (addr % ERASE_SIZE != 0) {
+    if (addr % kEraseSize != 0) {
       async_status = kISPInvalidArgs;
     }
-    if (!(addr >= FLASH_START && addr <= FLASH_END)) {
+    if (!(addr >= kFlashStartAddr && addr <= kFlashEndAddr)) {
       async_status = kISPInvalidArgs;
     }
-    if (addr + length > FLASH_END + 1) {
+    if (addr + length > kFlashEndAddr + 1) {
       async_status = kISPInvalidArgs;
     }
     if (async_status != kISPOk) {
@@ -159,14 +162,14 @@ public:
       return false;
     }
 
-    if (length % WRITE_SIZE != 0) {
+    if (length % kWriteSize != 0) {
       async_status = kISPInvalidArgs;
     }
     size_t addr = (uint32_t)start_addr;
-    if (addr % WRITE_SIZE != 0) {
+    if (addr % kWriteSize != 0) {
       async_status = kISPInvalidArgs;
     }
-    if (!(addr >= FLASH_START && addr <= FLASH_END)) {
+    if (!(addr >= kFlashStartAddr && addr <= kFlashEndAddr)) {
       async_status = kISPInvalidArgs;
     }
     if (async_status != kISPOk) {

@@ -31,7 +31,7 @@ const uint32_t HEARTBEAT_PERIOD = 1000;
 const uint32_t HEARTBEAT_INIT_PERIOD = 500;
 const uint32_t HEARTBEAT_PULSE_TIME = LED_PULSE_TIME;
 
-void dumpmem(Serial& serial, void* start_addr, size_t length, size_t bytes_per_line) {
+void dumpmem(Serial& serial, uint8_t* start_addr, size_t length, size_t bytes_per_line) {
   serial.printf("\r\n");
   for (size_t maj=0; maj<length; maj+=bytes_per_line) {
     serial.printf("% 8x: ", (uint32_t)start_addr);
@@ -94,8 +94,8 @@ void runApp(void* addr) {
   static uint32_t stack_ptr = 0;
   static void (*target)(void) = 0;
 
-  stack_ptr = (*(uint32_t*)(addr + 0));
-  target = (void (*)(void))(*(uint32_t*)(addr + 4));
+  stack_ptr = (*(uint32_t*)((uint8_t*)addr + 0));
+  target = (void (*)(void))(*(uint32_t*)((uint8_t*)addr + 4));
 
   // Just to be extra safe
   for (uint8_t i=0; i<NVIC_NUM_VECTORS; i++) {
@@ -296,11 +296,11 @@ int bootloaderMaster() {
   statusLED.setIdlePolarity(true);
 
   Timer heartbeatTimer;
-  uint32_t nextHeartbeatTime = 0;
+  int nextHeartbeatTime = 0;
   heartbeatTimer.start();
 
   const size_t RPC_BUFSIZE = 1024;
-  static char rpc_inbuf[RPC_BUFSIZE], rpc_outbuf[RPC_BUFSIZE];
+  static char rpc_inbuf[RPC_BUFSIZE];
   char* rpc_inptr = rpc_inbuf;  // next received byte pointer
 
   while (1) {
@@ -336,7 +336,7 @@ int bootloaderSlaveInit() {
   statusLED.setIdlePolarity(false);
 
   Timer heartbeatTimer;
-  uint32_t nextHeartbeatTime = 0;
+  int nextHeartbeatTime = 0;
   heartbeatTimer.start();
 
   // Wait for BOOT pin to go high
@@ -475,7 +475,6 @@ int bootloaderSlaveInit() {
         if (!i2c.read((char*)i2cData, 4)) {
           uint32_t addr = deserialize_uint32(i2cData);
           isp.isp_end();
-          dumpmem(uart, (void*)addr, 1024, 16);
           runApp((void*)addr);
         }
       } else {
