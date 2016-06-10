@@ -78,6 +78,8 @@ public:
    * Asynchronous versions of the above blocking operations. Returns true if the
    * operation was started (and a valid result will be on get_last_async_status,
    * false if not (like if an operation was pending).
+   *
+   * Data buffers must not be modified until the operation is complete!
    */
   virtual bool async_erase(void* start_addr, size_t length) = 0;
   virtual bool async_write(void* start_addr, void* data, size_t length) = 0;
