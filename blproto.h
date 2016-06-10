@@ -54,7 +54,7 @@ namespace BLPROTO {
 
   // Given the device number (position in chain), return the mbed-style I2C
   // address.
-  constexpr uint8_t DEVICE_ADDR(uint8_t device_num) {
+  uint8_t DEVICE_ADDR(uint8_t device_num) {
     return (device_num + 1) << 1;
   }
 }
