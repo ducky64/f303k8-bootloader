@@ -80,6 +80,20 @@ BootProto::RespStatus blstatus_from_ispstatus(ISPBase::ISPStatus status) {
   }
 }
 
+BootProto::RespStatus get_slave_status(I2C &i2c, uint8_t device) {
+  uint8_t i2cData[1];
+  BootProto::RespStatus resp = BootProto::kRespBusy;
+  while (resp == BootProto::kRespBusy) {
+    i2cData[0] = BootProto::kCmdStatus;
+    // TODO: debug why I2C device resets are necessary...
+    i2c.frequency(I2C_FREQUENCY); // reset the I2C device
+    i2c.write(BootProto::GetDeviceAddr(device), (char*)i2cData, 1);
+    i2c.read(BootProto::GetDeviceAddr(device), (char*)i2cData, 1);
+    resp = (BootProto::RespStatus)i2cData[0];
+  }
+  return resp;
+}
+
 BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, BufferedPacketReader& packet) {
   uint8_t i2cData[BootProto::kMaxPayloadLength];
   uint8_t opcode = packet.read<uint8_t>();
@@ -109,15 +123,7 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, Buffere
 
       i2c.write(BootProto::GetDeviceAddr(device), (char*)i2cData, data_length +11);
 
-      BootProto::RespStatus resp = BootProto::kRespBusy;
-      while (resp == BootProto::kRespBusy) {
-        i2c.frequency(I2C_FREQUENCY); // reset the I2C device
-        i2cData[0] = BootProto::kCmdStatus;
-        i2c.write(BootProto::GetDeviceAddr(device), (char*)i2cData, 1);
-        i2c.read(BootProto::GetDeviceAddr(device), (char*)i2cData, 1);
-        resp = (BootProto::RespStatus)i2cData[0];
-      }
-      return resp;
+      return get_slave_status(i2c, device);
     } else {
       uint32_t computed_crc = CRC32::compute_crc(i2cData + 11, data_length);
       if (computed_crc == crc) {
@@ -144,15 +150,7 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, Buffere
 
       i2c.write(BootProto::GetDeviceAddr(device), (char*)i2cData, 9);
 
-      BootProto::RespStatus resp = BootProto::kRespBusy;
-      while (resp == BootProto::kRespBusy) {
-        i2c.frequency(I2C_FREQUENCY); // reset the I2C device
-        i2cData[0] = BootProto::kCmdStatus;
-        i2c.write(BootProto::GetDeviceAddr(device), (char*)i2cData, 1);
-        i2c.read(BootProto::GetDeviceAddr(device), (char*)i2cData, 1);
-        resp = (BootProto::RespStatus)i2cData[0];
-      }
-      return resp;
+      return get_slave_status(i2c, device);
     } else {
       return blstatus_from_ispstatus(isp.erase((void*)addr, length));
     }
