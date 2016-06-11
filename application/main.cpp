@@ -12,6 +12,8 @@ PwmOut led1(D12);
 
 DigitalOut mainLed(LED1);
 
+DigitalIn bootInPin(D3, PullDown);
+
 int main() {
   Serial uart(SERIAL_TX, SERIAL_RX);
   uart.baud(115200);
@@ -21,6 +23,10 @@ int main() {
   bool dir = true;
 
   while (1) {
+    if (bootInPin == 0) {
+      NVIC_SystemReset();
+    }
+
     if (dir) {
       step += 1;
     } else {
