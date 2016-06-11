@@ -38,41 +38,53 @@ public:
 /**
  * Packet builder that stores data in a statically allocated buffer.
  */
-template <size_t size>
-class BufferedPacketBuilder : PacketBuilder {
+class MemoryPacketBuilder : public PacketBuilder {
 public:
-  BufferedPacketBuilder() : writePtr(buffer), endPtr(buffer+size) {
-  }
-
-  // Returns the number of bytes in the packet and stores the pointer to the
-  // beginning of the buffer in out_ptr.
-  size_t get_bytes(const uint8_t ** out_ptr) {
-    *out_ptr = buffer;
-    return writePtr - buffer;
+  MemoryPacketBuilder(uint8_t* writePtr, size_t length) :
+    writePtr(writePtr), endPtr(writePtr+length) {
   }
 
 protected:
-  bool put_uint8(uint8_t data) = 0;
-  bool put_uint16(uint16_t data) = 0;
-  bool put_uint32(uint32_t data) = 0;
-  bool put_float(float data) = 0;
+  bool put_uint8(uint8_t data);
+  bool put_uint16(uint16_t data);
+  bool put_uint32(uint32_t data);
+  bool put_float(float data);
 
   size_t getFreeBytes() {
     return endPtr - writePtr;
   }
 
-  uint8_t buffer[size];
   uint8_t* writePtr;
   uint8_t* endPtr;
 };
 
-class BufferedPacketReader : public PacketReader {
+template <size_t size>
+class BufferedPacketBuilder : public MemoryPacketBuilder {
 public:
-  BufferedPacketReader(uint8_t* readPtr, size_t length) :
+  BufferedPacketBuilder() : MemoryPacketBuilder(buffer, size) {
+  }
+
+  // Returns the pointer to the beginning of the buffer.
+  const uint8_t * getBuffer() const {
+    return buffer;
+  }
+
+// Returns the current size of the packet, in bytes.
+  size_t getLength() const {
+    return writePtr - buffer;
+  }
+
+protected:
+  uint8_t buffer[size];
+};
+
+class MemoryPacketReader : public PacketReader {
+public:
+  MemoryPacketReader(uint8_t* readPtr, size_t length) :
     readPtr(readPtr), endPtr(readPtr + length) {
   }
 
-  size_t getRemainingBytes() {
+  size_t getRemainingBytes() const {
     return endPtr - readPtr;
   }
 

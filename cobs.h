@@ -5,11 +5,11 @@
 
 class COBSDecoder;
 
-class COBSPacketReaderInterface : public BufferedPacketReader {
+class COBSPacketReaderInterface : public MemoryPacketReader {
   friend COBSDecoder;
 
 public:
-  COBSPacketReaderInterface() : BufferedPacketReader(NULL, 0) {
+  COBSPacketReaderInterface() : MemoryPacketReader(NULL, 0) {
   }
   virtual void reset() = 0;
 

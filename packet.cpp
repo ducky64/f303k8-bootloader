@@ -16,8 +16,7 @@ template<> bool PacketBuilder::put<float>(float data) {
   return put_float(data);
 }
 
-template<size_t size>
-bool BufferedPacketBuilder<size>::put_uint8(uint8_t data) {
+bool MemoryPacketBuilder::put_uint8(uint8_t data) {
   if (getFreeBytes() < 1) {
     return false;
   }
@@ -26,8 +25,7 @@ bool BufferedPacketBuilder<size>::put_uint8(uint8_t data) {
   return true;
 }
 
-template<size_t size>
-bool BufferedPacketBuilder<size>::put_uint16(uint16_t data) {
+bool MemoryPacketBuilder::put_uint16(uint16_t data) {
   if (getFreeBytes() < 2) {
     return false;
   }
@@ -37,8 +35,7 @@ bool BufferedPacketBuilder<size>::put_uint16(uint16_t data) {
   return true;
 }
 
-template<size_t size>
-bool BufferedPacketBuilder<size>::put_uint32(uint32_t data) {
+bool MemoryPacketBuilder::put_uint32(uint32_t data) {
   if (getFreeBytes() < 4) {
     return false;
   }
@@ -50,8 +47,7 @@ bool BufferedPacketBuilder<size>::put_uint32(uint32_t data) {
   return true;
 }
 
-template<size_t size>
-bool BufferedPacketBuilder<size>::put_float(float data) {
+bool MemoryPacketBuilder::put_float(float data) {
   if (getFreeBytes() < 4) {
     return false;
   }
@@ -89,7 +85,7 @@ template<> float PacketReader::read<float>() {
   return out;
 }
 
-bool BufferedPacketReader::read_uint8(uint8_t* out) {
+bool MemoryPacketReader::read_uint8(uint8_t* out) {
   if (getRemainingBytes() < 1) {
     return false;
   }
@@ -97,7 +93,7 @@ bool BufferedPacketReader::read_uint8(uint8_t* out) {
   readPtr += 1;
   return true;
 }
-bool BufferedPacketReader::read_uint16(uint16_t* out) {
+bool MemoryPacketReader::read_uint16(uint16_t* out) {
   if (getRemainingBytes() < 2) {
     return false;
   }
@@ -106,7 +102,7 @@ bool BufferedPacketReader::read_uint16(uint16_t* out) {
   readPtr += 2;
   return true;
 }
-bool BufferedPacketReader::read_uint32(uint32_t* out) {
+bool MemoryPacketReader::read_uint32(uint32_t* out) {
   if (getRemainingBytes() < 4) {
     return false;
   }
@@ -118,7 +114,7 @@ bool BufferedPacketReader::read_uint32(uint32_t* out) {
   return true;
 }
 
-bool BufferedPacketReader::read_float(float* out) {
+bool MemoryPacketReader::read_float(float* out) {
   if (getRemainingBytes() < 4) {
     return false;
   }

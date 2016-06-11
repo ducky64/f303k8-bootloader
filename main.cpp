@@ -94,8 +94,8 @@ BootProto::RespStatus get_slave_status(I2C &i2c, uint8_t device) {
   return resp;
 }
 
-BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, BufferedPacketReader& packet) {
-  uint8_t i2cData[BootProto::kMaxPayloadLength];
+BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, MemoryPacketReader& packet) {
+  BufferedPacketBuilder<BootProto::kMaxPayloadLength> i2cPacket;
   uint8_t opcode = packet.read<uint8_t>();
 
   if (opcode == 'W') {
@@ -107,27 +107,31 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, Buffere
       return BootProto::kRespInvalidFormat;
     }
 
-    size_t i = 0;
-    while (packet.getRemainingBytes() > 0) {
-      i2cData[11 + i] = packet.read<uint8_t>();
-      i += 1;
-    }
-
     if (device > 0) {
       device = device - 1;
 
-      i2cData[0] = BootProto::kCmdWrite;
-      serialize_uint32(i2cData+1, addr);
-      serialize_uint16(i2cData+5, (uint16_t)data_length);
-      serialize_uint32(i2cData+7, crc);
-
-      i2c.write(BootProto::GetDeviceAddr(device), (char*)i2cData, data_length +11);
+      i2cPacket.put<uint8_t>(BootProto::kCmdWrite);
+      i2cPacket.put<uint32_t>(addr);
+      i2cPacket.put<uint16_t>((uint16_t)data_length);
+      i2cPacket.put<uint32_t>(crc);
+      while (packet.getRemainingBytes() > 0) {
+        i2cPacket.put<uint8_t>(packet.read<uint8_t>());
+      }
+      i2c.write(BootProto::GetDeviceAddr(device),
+          (char*)i2cPacket.getBuffer(), i2cPacket.getLength());
 
       return get_slave_status(i2c, device);
     } else {
-      uint32_t computed_crc = CRC32::compute_crc(i2cData + 11, data_length);
+      uint8_t data[1024];
+      size_t i = 0;
+      while (packet.getRemainingBytes() > 0) {
+        data[i] = packet.read<uint8_t>();
+        i += 1;
+      }
+
+      uint32_t computed_crc = CRC32::compute_crc(data, data_length);
       if (computed_crc == crc) {
-        return blstatus_from_ispstatus(isp.write((void*)addr, i2cData + 11, data_length));
+        return blstatus_from_ispstatus(isp.write((void*)addr, data, data_length));
       } else {
         return BootProto::kRespInvalidChecksum;
       }
@@ -144,11 +148,11 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, Buffere
     if (device > 0) {
       device = device - 1;
 
-      i2cData[0] = BootProto::kCmdErase;
-      serialize_uint32(i2cData+1, addr);
-      serialize_uint32(i2cData+5, length);
-
-      i2c.write(BootProto::GetDeviceAddr(device), (char*)i2cData, 9);
+      i2cPacket.put<uint8_t>(BootProto::kCmdErase);
+      i2cPacket.put<uint32_t>(addr);
+      i2cPacket.put<uint32_t>(length);
+      i2c.write(BootProto::GetDeviceAddr(device),
+          (char*)i2cPacket.getBuffer(), i2cPacket.getLength());
 
       return get_slave_status(i2c, device);
     } else {
@@ -163,10 +167,10 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, Buffere
 
     if (device > 0) {
       device = device - 1;
-      i2cData[0] = BootProto::kCmdRunApp;
-      serialize_uint32(i2cData+1, (uint32_t)APP_BEGIN_PTR);
-
-      i2c.write(BootProto::GetDeviceAddr(device), (char*)i2cData, 5);
+      i2cPacket.put<uint8_t>(BootProto::kCmdRunApp);
+      i2cPacket.put<uint32_t>(addr);
+      i2c.write(BootProto::GetDeviceAddr(device),
+          (char*)i2cPacket.getBuffer(), i2cPacket.getLength());
     } else {
       runApp((void*)addr);
     }
