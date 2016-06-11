@@ -9,6 +9,8 @@
 
 #include "crc.h"
 #include "endian.h"
+#include "packet.h"
+#include "cobs.h"
 
 #include "blproto.h"
 
@@ -302,6 +304,10 @@ int bootloaderMaster() {
   const size_t RPC_BUFSIZE = 1024;
   static char rpc_inbuf[RPC_BUFSIZE];
   char* rpc_inptr = rpc_inbuf;  // next received byte pointer
+
+  COBSPacketReader packet;
+  COBSDecoder decoder;
+  decoder.set_buffer(&packet);
 
   while (1) {
     while (uart.readable() || uart_in.readable()) {
