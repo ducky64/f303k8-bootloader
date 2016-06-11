@@ -5,10 +5,24 @@
 
 class COBSDecoder;
 
-class COBSPacketReader : public BufferedPacketReader {
+class COBSPacketReaderInterface : public BufferedPacketReader {
   friend COBSDecoder;
+
 public:
-  COBSPacketReader() : BufferedPacketReader(NULL, 0), writePtr(buffer) {}
+  COBSPacketReaderInterface() : BufferedPacketReader(NULL, 0) {
+  }
+  virtual void reset() = 0;
+
+protected:
+  virtual void finish() = 0;
+  virtual bool putByte(uint8_t byte) = 0;
+};
+
+template <size_t size>
+class COBSPacketReader : public COBSPacketReaderInterface {
+public:
+  COBSPacketReader() : COBSPacketReaderInterface(), writePtr(buffer) {
+  }
 
   /**
    * Resets this to be ready for a new incoming packet.
@@ -33,7 +47,7 @@ protected:
    * false if not (like in buffer overflow).
    */
   bool putByte(uint8_t byte) {
-    if (writePtr >= buffer + kPacketMaxLen) {
+    if (writePtr >= buffer + size) {
       return false;
     }
     *writePtr = byte;
@@ -41,7 +55,7 @@ protected:
     return true;
   }
 
-  uint8_t buffer[kPacketMaxLen];
+  uint8_t buffer[size];
   uint8_t* writePtr;
 };
 
@@ -55,7 +69,7 @@ public:
   /**
    * Sets the current buffer (a COBSPacketReader object) to write to.
    */
-  void set_buffer(COBSPacketReader* reader) {
+  void set_buffer(COBSPacketReaderInterface* reader) {
     currReader = reader;
   }
 
@@ -81,7 +95,7 @@ public:
   COBSResult decode(uint8_t* chunk, size_t length, size_t *read_out);
 
 protected:
-  COBSPacketReader* currReader;  // current buffer, can be NULL if none assigned
+  COBSPacketReaderInterface* currReader;  // current buffer, can be NULL if none assigned
 
   enum DecoderStatus {
     kDecodeBegin,  // last byte was a flag byte

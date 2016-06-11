@@ -4,12 +4,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef PACKET_MAX_LEN
-const size_t kPacketMaxLen = 512;
-#else
-const size_t kPacketMaxLen = PACKET_MAX_LEN;
-#endif
-
 /**
  * Packet builder interface.
  */
@@ -44,9 +38,10 @@ public:
 /**
  * Packet builder that stores data in a statically allocated buffer.
  */
+template <size_t size>
 class BufferedPacketBuilder : PacketBuilder {
 public:
-  BufferedPacketBuilder() : writePtr(buffer), endPtr(buffer+kPacketMaxLen) {
+  BufferedPacketBuilder() : writePtr(buffer), endPtr(buffer+size) {
   }
 
   // Returns the number of bytes in the packet and stores the pointer to the
@@ -66,7 +61,7 @@ protected:
     return endPtr - writePtr;
   }
 
-  uint8_t buffer[kPacketMaxLen];
+  uint8_t buffer[size];
   uint8_t* writePtr;
   uint8_t* endPtr;
 };

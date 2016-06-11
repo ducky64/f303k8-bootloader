@@ -16,7 +16,8 @@ template<> bool PacketBuilder::put<float>(float data) {
   return put_float(data);
 }
 
-bool BufferedPacketBuilder::put_uint8(uint8_t data) {
+template<size_t size>
+bool BufferedPacketBuilder<size>::put_uint8(uint8_t data) {
   if (getFreeBytes() < 1) {
     return false;
   }
@@ -25,7 +26,8 @@ bool BufferedPacketBuilder::put_uint8(uint8_t data) {
   return true;
 }
 
-bool BufferedPacketBuilder::put_uint16(uint16_t data) {
+template<size_t size>
+bool BufferedPacketBuilder<size>::put_uint16(uint16_t data) {
   if (getFreeBytes() < 2) {
     return false;
   }
@@ -35,7 +37,8 @@ bool BufferedPacketBuilder::put_uint16(uint16_t data) {
   return true;
 }
 
-bool BufferedPacketBuilder::put_uint32(uint32_t data) {
+template<size_t size>
+bool BufferedPacketBuilder<size>::put_uint32(uint32_t data) {
   if (getFreeBytes() < 4) {
     return false;
   }
@@ -47,7 +50,8 @@ bool BufferedPacketBuilder::put_uint32(uint32_t data) {
   return true;
 }
 
-bool BufferedPacketBuilder::put_float(float data) {
+template<size_t size>
+bool BufferedPacketBuilder<size>::put_float(float data) {
   if (getFreeBytes() < 4) {
     return false;
   }
