@@ -181,23 +181,15 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, Buffere
 
 int bootloaderMaster() {
   F303K8ISP isp;
-  uart.printf("Device ID: 0x% 8x, Device Serial: 0x% 8x\r\n",
-      isp.get_device_id(), isp.get_device_serial());
-  uart.printf("Bootloader address range: 0x% 8x - 0x% 8x\r\n",
-      (uint32_t)BL_BEGIN_PTR, (uint32_t)APP_BEGIN_PTR);
-  uart.printf("Flash unlock: %i\r\n",
-      isp.isp_begin());
 
   I2C i2c(D4, D5);
   uint8_t i2cData[BootProto::kMaxPayloadLength];
 
   i2c.frequency(I2C_FREQUENCY);
 
-  wait_ms(500);
   bootOutPin = 1;
 
   uint8_t numDevices = 0;
-
   while (1) {
     wait_ms(BootProto::kBootToAddrDelayMs);
 
