@@ -69,9 +69,15 @@ public:
     return buffer;
   }
 
-// Returns the current size of the packet, in bytes.
+  // Returns the current size of the packet, in bytes.
   size_t getLength() const {
     return writePtr - buffer;
+  }
+
+  // Resets this, like when a new packet is to be written.
+  void reset() {
+    writePtr = buffer;
+    endPtr = buffer + size;
   }
 
 protected:
@@ -96,6 +102,46 @@ protected:
 
   uint8_t* readPtr;
   uint8_t* endPtr;
+};
+
+
+class BufferedPacketReaderInterface : public MemoryPacketReader {
+public:
+  BufferedPacketReaderInterface(uint8_t *buffer) : MemoryPacketReader(buffer, 0) {
+  }
+  virtual void reset() = 0;
+  virtual bool putByte(uint8_t byte) = 0;
+};
+
+template <size_t size>
+class BufferedPacketReader : public BufferedPacketReaderInterface {
+public:
+  BufferedPacketReader() : BufferedPacketReaderInterface(buffer) {
+  }
+
+  /**
+   * Resets this to be ready for a new incoming packet.
+   */
+  void reset() {
+    readPtr = buffer;
+    endPtr = buffer;
+  }
+
+protected:
+  /**
+   * Write a new byte to the end of this packet. Returns true if successful,
+   * false if not (like in buffer overflow).
+   */
+  bool putByte(uint8_t byte) {
+    if (endPtr >= buffer + size) {
+      return false;
+    }
+    *endPtr = byte;
+    endPtr++;
+    return true;
+  }
+
+  uint8_t buffer[size];
 };
 
 #endif

@@ -14,8 +14,6 @@ COBSDecoder::COBSResult COBSDecoder::decode(uint8_t* chunk, size_t length, size_
       if (decoderStatus == kDecodeNormal) {
         nextSpecial -= 1;
         if (nextSpecial == 0 && insertZeroAtNextSpecial) {
-          currReader->finish();
-
           decoderStatus = kDecodeBegin;
           return kResultDone;
         } else {

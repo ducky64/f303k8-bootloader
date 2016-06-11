@@ -224,7 +224,7 @@ int bootloaderMaster() {
   int nextHeartbeatTime = 0;
   heartbeatTimer.start();
 
-  COBSPacketReader<BootProto::kMaxPayloadLength> packet;
+  BufferedPacketReader<BootProto::kMaxPayloadLength> packet;
   COBSDecoder decoder;
   decoder.set_buffer(&packet);
 
