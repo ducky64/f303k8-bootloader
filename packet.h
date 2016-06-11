@@ -14,10 +14,6 @@ namespace internal {
   // Stores data of type T into loc in network order, returns the number of
   // bytes written.
   template<typename T> size_t buf_put(uint8_t* loc, size_t max_len, T data);
-
-  // Reads data of type T from loc in network order, returns the number of bytes
-  // read.
-  template<typename T> size_t buf_read(uint8_t* loc, size_t max_len, T* data);
 }
 
 /**
@@ -75,38 +71,21 @@ private:
 class BufferedPacketReader : public PacketReader {
 public:
   BufferedPacketReader(uint8_t* readPtr, size_t length) :
-    readPtr(readPtr), length(length) {
+    readPtr(readPtr), endPtr(readPtr + length) {
   }
 
   size_t getRemainingBytes() {
-    return length;
+    return endPtr - readPtr;
   }
 
 protected:
-  template<typename T> T read_internal() {
-    T output;
-    size_t read_bytes = internal::buf_read<T>(readPtr, length, &output);
-    readPtr += read_bytes;
-    length -= read_bytes;
-    // TODO: underflow detection
-    return output;
-  }
-
-  uint8_t read_uint8() {
-    return read_internal<uint8_t>();
-  }
-  uint16_t read_uint16() {
-    return read_internal<uint16_t>();
-  }
-  uint32_t read_uint32() {
-    return read_internal<uint32_t>();
-  }
-  float read_float() {
-    return read_internal<float>();
-  }
+  uint8_t read_uint8();
+  uint16_t read_uint16();
+  uint32_t read_uint32();
+  float read_float();
 
   uint8_t* readPtr;
-  size_t length;  // number of bytes remaining in buffer
+  uint8_t* endPtr;
 };
 
 #endif

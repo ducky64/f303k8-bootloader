@@ -15,7 +15,7 @@ public:
    */
   void reset() {
     writePtr = buffer;
-    length = 0;
+    endPtr = 0;
   }
 
 protected:
@@ -23,8 +23,8 @@ protected:
    * Call when finished writing to this packet, so it's ready for reading.
    */
   void finish() {
-    length = writePtr - buffer;
     readPtr = buffer;
+    endPtr = writePtr;
     writePtr = NULL;
   }
 
