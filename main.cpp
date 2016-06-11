@@ -172,6 +172,7 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, MemoryP
       i2c.write(BootProto::GetDeviceAddr(device),
           (char*)i2cPacket.getBuffer(), i2cPacket.getLength());
     } else {
+      isp.isp_end();
       runApp((void*)addr);
     }
 
@@ -183,6 +184,7 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, MemoryP
 
 int bootloaderMaster() {
   F303K8ISP isp;
+  isp.isp_begin();
 
   I2C i2c(D4, D5);
   uint8_t i2cData[BootProto::kMaxPayloadLength];

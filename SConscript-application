@@ -30,6 +30,7 @@ application = env.Program(
   target = '../application',
   source = Glob('application/*.cpp'),
 )
+env.Depends(application, 'mbed-overrides/stm32f303k8-application/STM32F303X8.ld')
 env.Objcopy(application)
 env.Objdump(application)
 env.SymbolsSize(application)

@@ -18,9 +18,9 @@ parser.add_argument('serial', type=str,
                     help='serial port to use, like COM1 (Windows) or /dev/ttyACM0 (Linux)')
 parser.add_argument('--baud', type=int, default=115200,
                     help='serial baud rate')
-parser.add_argument('--address', type=int, default=0x8008000,
+parser.add_argument('--address', type=int, default=0x8000000 + 16*1024,
                     help='starting address')
-parser.add_argument('--memsize', type=int, default=32768,
+parser.add_argument('--memsize', type=int, default=48*1024,
                     help='memory size')
 parser.add_argument('--device', type=int, default=1,
                     help='device number, 0 is master, slaves start at 1')
@@ -72,7 +72,7 @@ while True:
   else:
     break
 
-logging.debug("Serial -> Jump")
+logging.debug("Serial -> Jump(0x% 8x)" % args.address)
 
 packet = PacketBuilder()
 packet.put_uint8(ord('J'))
