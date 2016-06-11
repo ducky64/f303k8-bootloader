@@ -8,7 +8,6 @@
 #include "mbed.h"
 
 #include "crc.h"
-#include "endian.h"
 #include "packet.h"
 #include "cobs.h"
 
@@ -122,13 +121,7 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, MemoryP
 
       return get_slave_status(i2c, device);
     } else {
-      uint8_t data[1024];
-      size_t i = 0;
-      while (packet.getRemainingBytes() > 0) {
-        data[i] = packet.read<uint8_t>();
-        i += 1;
-      }
-
+      uint8_t* data = packet.read_buf(data_length);
       uint32_t computed_crc = CRC32::compute_crc(data, data_length);
       if (computed_crc == crc) {
         return blstatus_from_ispstatus(isp.write((void*)addr, data, data_length));
@@ -325,7 +318,7 @@ int bootloaderSlaveInit() {
   F303K8ISP isp;
   isp.isp_begin();
 
-  uint8_t i2cData[BootProto::kMaxPayloadLength];
+  BufferedPacketReader<BootProto::kMaxPayloadLength> i2cPacket;
   // Override status. DONE means to read from ISP status.
   BootProto::RespStatus lastStatus = BootProto::kRespDone;
 
@@ -364,28 +357,31 @@ int bootloaderSlaveInit() {
     case I2CSlave::WriteAddressed:
       statusLED.pulse(kActivityPulseTimeMs);
       lastI2CCommand = i2c.read();
+      i2cPacket.reset();
       if (lastI2CCommand == BootProto::kCmdSetBootOut) {
         bootOutPin = 1;
       } else if (lastI2CCommand == BootProto::kCmdErase) {
-        if (!i2c.read((char*)i2cData, 8)) {
-          uint32_t startAddr = deserialize_uint32(i2cData+0);
-          uint32_t len = deserialize_uint32(i2cData+4);
+        if (!i2c.read((char*)i2cPacket.ptrPutBytes(8), 8)) {
+          uint32_t startAddr = i2cPacket.read<uint32_t>();
+          uint32_t len = i2cPacket.read<uint32_t>();
+
           isp.async_erase((void*)startAddr, len);
           lastStatus = BootProto::kRespDone;
         } else {
           lastStatus = BootProto::kRespInvalidFormat;
         }
       } else if (lastI2CCommand == BootProto::kCmdWrite) {
-        if (!i2c.read((char*)i2cData, 10)) {
-          uint32_t startAddr = deserialize_uint32(i2cData+0);
-          uint16_t len = deserialize_uint16(i2cData+4);
-          uint32_t crc = deserialize_uint32(i2cData+6);
+        if (!i2c.read((char*)i2cPacket.ptrPutBytes(10), 10)) {
+          uint32_t startAddr = i2cPacket.read<uint32_t>();
+          uint16_t len = i2cPacket.read<uint16_t>();
+          uint32_t crc = i2cPacket.read<uint32_t>();
           // TODO: allow len >= 256 transfers by breaking i2c read calls into
           // smaller chunks
-          if (!i2c.read((char*)i2cData, len)) {
-            uint32_t computed_crc = CRC32::compute_crc(i2cData, len);
+          if (!i2c.read((char*)i2cPacket.ptrPutBytes(len), len)) {
+            uint8_t* data = i2cPacket.read_buf(len);
+            uint32_t computed_crc = CRC32::compute_crc(data, len);
             if (computed_crc == crc) {
-              isp.async_write((void*)startAddr, i2cData, len);
+              isp.async_write((void*)startAddr, data, len);
               lastStatus = BootProto::kRespDone;
             } else {
               lastStatus = BootProto::kRespInvalidChecksum;
@@ -397,8 +393,8 @@ int bootloaderSlaveInit() {
           lastStatus = BootProto::kRespInvalidFormat;
         }
       } else if (lastI2CCommand == BootProto::kCmdRunApp) {
-        if (!i2c.read((char*)i2cData, 4)) {
-          uint32_t addr = deserialize_uint32(i2cData);
+        if (!i2c.read((char*)i2cPacket.ptrPutBytes(4), 4)) {
+          uint32_t addr = i2cPacket.read<uint32_t>();
           isp.isp_end();
           runApp((void*)addr);
         }

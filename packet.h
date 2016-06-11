@@ -94,6 +94,18 @@ public:
     return endPtr - readPtr;
   }
 
+  // Returns a pointer into the buffer and advance the read pointer by numBytes.
+  // Valid as long as this object is valid and has not been reset.
+  // Returns NULL if there are not numBytes left.
+  uint8_t* read_buf(size_t numBytes) {
+    if (readPtr > endPtr || (uint32_t)(endPtr - readPtr) < numBytes) {
+      return NULL;
+    }
+    uint8_t* rtn = readPtr;
+    readPtr += numBytes;
+    return rtn;
+  }
+
 protected:
   bool read_uint8(uint8_t* out);
   bool read_uint16(uint16_t* out);
@@ -127,7 +139,6 @@ public:
     endPtr = buffer;
   }
 
-protected:
   /**
    * Write a new byte to the end of this packet. Returns true if successful,
    * false if not (like in buffer overflow).
@@ -141,6 +152,22 @@ protected:
     return true;
   }
 
+  /**
+   * Returns a pointer into the end of the buffer for another function to stuff
+   * data into, and advance the end of the buffer by numBytes.
+   *
+   * If there are less than numBytes in the buffer, returns NULL.
+   */
+  uint8_t* ptrPutBytes(size_t numBytes) {
+    if (endPtr + numBytes >= buffer + size) {
+      return NULL;
+    }
+    uint8_t* rtn = endPtr;
+    endPtr += numBytes;
+    return rtn;
+  }
+
+protected:
   uint8_t buffer[size];
 };
 
