@@ -78,6 +78,10 @@ public:
     readPtr(readPtr), length(length) {
   }
 
+  size_t getRemainingBytes() {
+    return length;
+  }
+
 protected:
   template<typename T> T read_internal() {
     T output;

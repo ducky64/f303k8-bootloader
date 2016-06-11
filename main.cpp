@@ -33,59 +33,9 @@ const uint32_t HEARTBEAT_PERIOD = 1000;
 const uint32_t HEARTBEAT_INIT_PERIOD = 500;
 const uint32_t HEARTBEAT_PULSE_TIME = LED_PULSE_TIME;
 
-void dumpmem(Serial& serial, uint8_t* start_addr, size_t length, size_t bytes_per_line) {
-  serial.printf("\r\n");
-  for (size_t maj=0; maj<length; maj+=bytes_per_line) {
-    serial.printf("% 8x: ", (uint32_t)start_addr);
-    // TODO: allow partial line prints
-    for (size_t min=0; min<bytes_per_line; min+=1) {
-      serial.printf("%02x ", *(uint8_t*)start_addr);
-      start_addr += 1;
-    }
-    serial.printf("\r\n");
-  }
-}
-
 extern char _FlashStart, _FlashEnd;
 void* const BL_BEGIN_PTR = &_FlashStart;
 void* const APP_BEGIN_PTR = &_FlashEnd;
-
-bool hex_char_to_nibble(uint8_t hex_char, uint8_t* nibble_out) {
-  if (hex_char >= '0' && hex_char <= '9') {
-    *nibble_out = hex_char - '0';
-    return true;
-  } else if (hex_char >= 'A' && hex_char <= 'F') {
-    *nibble_out = hex_char - 'A' + 0xA;
-    return true;
-  } else if (hex_char >= 'a' && hex_char <= 'f') {
-    *nibble_out = hex_char - 'a' + 0xA;
-    return true;
-  } else {
-    return false;
-  }
-}
-
-/**
- * Reads through a array containing ASCII hex bytes and converts it into raw hex
- * bytes. length is the number of bytes in the output (2x the number of
- * characters in the input). Returns true if all bytes were converted, otherwise
- * false (for example, if detected non-hex bytes).
- * out may alias with in, doing an in-place decode.
- */
-bool ascii_hex_to_uint8_array(uint8_t *out, uint8_t *in, size_t length) {
-  while (length > 0) {
-    uint8_t high_nibble, low_nibble;
-    if (!hex_char_to_nibble(in[0], &high_nibble)
-        || !hex_char_to_nibble(in[1], &low_nibble)) {
-      return false;
-    }
-    *out = (high_nibble << 4) | low_nibble;
-    in += 2;
-    out += 1;
-    length -= 1;
-  }
-  return true;
-}
 
 /**
  * Runs an application at the specified address. Should not return under normal
@@ -130,36 +80,24 @@ BootProto::RespStatus blstatus_from_ispstatus(ISPBase::ISPStatus status) {
   }
 }
 
-BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, uint8_t* cmd, size_t length) {
+BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, BufferedPacketReader& packet) {
   uint8_t i2cData[BootProto::kMaxPayloadLength];
+  uint8_t opcode = packet.read<uint8_t>();
 
-  if (cmd[0] == 'W') {
-    size_t data_length = length - 21;
-    if (data_length % 2 != 0) {
-      return BootProto::kRespInvalidFormat; // not byte aligned
-    }
-    data_length = data_length / 2;
-
-    if (!ascii_hex_to_uint8_array(cmd, cmd+1, 2)) {
-      return BootProto::kRespInvalidFormat;
-    }
-    uint16_t device = deserialize_uint16(cmd);
-
-    if (!ascii_hex_to_uint8_array(cmd, cmd+5, 4)) {
-      return BootProto::kRespInvalidFormat;
-    }
-    uint32_t addr = deserialize_uint32(cmd);
-
-    if (!ascii_hex_to_uint8_array(cmd, cmd+13, 4)) {
-      return BootProto::kRespInvalidFormat;
-    }
-    uint32_t crc = deserialize_uint32(cmd);
-
-    if (!ascii_hex_to_uint8_array(cmd, cmd+21, data_length)) {
+  if (opcode == 'W') {
+    uint8_t device = packet.read<uint8_t>();
+    uint32_t addr = packet.read<uint32_t>();
+    uint32_t crc = packet.read<uint32_t>();
+    size_t data_length = packet.getRemainingBytes();
+    if (data_length < 1) {
       return BootProto::kRespInvalidFormat;
     }
 
-//    uart.printf("I2C Write %x: ptr 0x% 8x, crc 0x% 8x / 0x% 8x, len %i  ", device, addr, crc,computed_crc, data_length);
+    size_t i = 0;
+    while (packet.getRemainingBytes() > 0) {
+      i2cData[11 + i] = packet.read<uint8_t>();
+      i += 1;
+    }
 
     if (device > 0) {
       device = device - 1;
@@ -168,9 +106,6 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, uint8_t
       serialize_uint32(i2cData+1, addr);
       serialize_uint16(i2cData+5, (uint16_t)data_length);
       serialize_uint32(i2cData+7, crc);
-      for (size_t i=0; i<data_length; i++) {
-        i2cData[i+11] = cmd[i];
-      }
 
       i2c.write(BootProto::GetDeviceAddr(device), (char*)i2cData, data_length +11);
 
@@ -184,23 +119,21 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, uint8_t
       }
       return resp;
     } else {
-      return blstatus_from_ispstatus(isp.write((void*)addr, cmd, data_length));
-    }
-  } else if (cmd[0] == 'E') {
-    if (!ascii_hex_to_uint8_array(cmd, cmd+1, 2)) {
-      return BootProto::kRespInvalidFormat;
-    }
-    uint16_t device = deserialize_uint16(cmd);
+      uint32_t computed_crc = CRC32::compute_crc(i2cData + 11, data_length);
+      if (computed_crc == crc) {
+        return blstatus_from_ispstatus(isp.write((void*)addr, i2cData + 11, data_length));
+      } else {
+        return BootProto::kRespInvalidChecksum;
+      }
 
-    if (!ascii_hex_to_uint8_array(cmd, cmd+5, 4)) {
+    }
+  } else if (opcode == 'E') {
+    uint8_t device = packet.read<uint8_t>();
+    uint32_t addr = packet.read<uint32_t>();
+    uint32_t length = packet.read<uint32_t>();
+    if (packet.getRemainingBytes() > 0) {
       return BootProto::kRespInvalidFormat;
     }
-    uint32_t addr = deserialize_uint32(cmd);
-
-    if (!ascii_hex_to_uint8_array(cmd, cmd+13, 4)) {
-      return BootProto::kRespInvalidFormat;
-    }
-    uint32_t length = deserialize_uint32(cmd);
 
     if (device > 0) {
       device = device - 1;
@@ -223,16 +156,12 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, uint8_t
     } else {
       return blstatus_from_ispstatus(isp.erase((void*)addr, length));
     }
-  } else if (cmd[0] == 'J') {
-    if (!ascii_hex_to_uint8_array(cmd, cmd+1, 2)) {
+  } else if (opcode == 'J') {
+    uint8_t device = packet.read<uint8_t>();
+    uint32_t addr = packet.read<uint32_t>();
+    if (packet.getRemainingBytes() > 0) {
       return BootProto::kRespInvalidFormat;
     }
-    uint16_t device = deserialize_uint16(cmd);
-
-    if (!ascii_hex_to_uint8_array(cmd, cmd+5, 4)) {
-      return BootProto::kRespInvalidFormat;
-    }
-    uint32_t addr = deserialize_uint32(cmd);
 
     if (device > 0) {
       device = device - 1;
@@ -301,31 +230,23 @@ int bootloaderMaster() {
   int nextHeartbeatTime = 0;
   heartbeatTimer.start();
 
-  const size_t RPC_BUFSIZE = 1024;
-  static char rpc_inbuf[RPC_BUFSIZE];
-  char* rpc_inptr = rpc_inbuf;  // next received byte pointer
-
   COBSPacketReader packet;
   COBSDecoder decoder;
   decoder.set_buffer(&packet);
 
   while (1) {
     while (uart.readable() || uart_in.readable()) {
-      char rx = uart.readable() ? uart.getc() : uart_in.getc();
-      if (rx == '\n' || rx == '\r') {
-        *rpc_inptr = '\0';  // optionally append the string terminator
-        uint8_t rtn = process_bootloader_command(isp, i2c,
-            (uint8_t*)rpc_inbuf, rpc_inptr - rpc_inbuf);
-        uart.printf("D%i\n", rtn);
-        rpc_inptr = rpc_inbuf;  // reset the received byte pointer
-      } else {
-        *rpc_inptr = rx;
-        rpc_inptr++;  // advance the received byte pointer
-        if (rpc_inptr >= rpc_inbuf + RPC_BUFSIZE) {
-          // you should emit some helpful error on overflow
-          rpc_inptr = rpc_inbuf;  // reset the received byte pointer, discarding what we have
-        }
+      uint8_t rx = uart.readable() ? (uint8_t)uart.getc() : (uint8_t)uart_in.getc();
+      size_t bytes_decoded;
+      COBSDecoder::COBSResult result = decoder.decode(&rx, 1, &bytes_decoded);
+
+      if (result == COBSDecoder::kResultDone) {
+        BootProto::RespStatus status = process_bootloader_command(isp, i2c, packet);
+        uart.printf("D%i\n", status);
+        packet.reset();
+        decoder.set_buffer(&packet);
       }
+
       statusLED.pulse(LED_PULSE_TIME);
     }
 

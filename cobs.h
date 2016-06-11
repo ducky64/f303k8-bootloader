@@ -10,7 +10,6 @@ class COBSPacketReader : public BufferedPacketReader {
 public:
   COBSPacketReader() : BufferedPacketReader(NULL, 0), writePtr(buffer) {}
 
-protected:
   /**
    * Resets this to be ready for a new incoming packet.
    */
@@ -19,6 +18,7 @@ protected:
     length = 0;
   }
 
+protected:
   /**
    * Call when finished writing to this packet, so it's ready for reading.
    */

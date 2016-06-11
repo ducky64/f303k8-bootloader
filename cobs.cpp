@@ -10,8 +10,9 @@ COBSDecoder::COBSResult COBSDecoder::decode(uint8_t* chunk, size_t length, size_
     uint8_t byte = *chunk;
     (*read_out) += 1;
 
-    if (byte == 0) {
+    if (byte == 0x00) {
       if (decoderStatus == kDecodeNormal) {
+        nextSpecial -= 1;
         if (nextSpecial == 0 && insertZeroAtNextSpecial) {
           currReader->finish();
 

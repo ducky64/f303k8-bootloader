@@ -34,6 +34,7 @@
 .settings
 
 # Python
+*.pyc
 __pycache__
 
 # SCons
