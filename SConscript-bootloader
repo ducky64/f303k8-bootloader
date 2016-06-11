@@ -1,7 +1,7 @@
 Import('env')
 
 env = env.Clone()
-env.Append(CCFLAGS = ['-w'])
+env.Append(CCFLAGS = ['-w', '-include', 'mbed-overrides/stm32f303k8-bootloader/device.h'])
 mbed_lib = env.MbedLikeLibrary(
     'mbed', 'mbed/hal/',
     ['api/', 'common/', 'hal/', 'targets/cmsis/', 'targets/hal/'],
