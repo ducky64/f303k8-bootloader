@@ -64,7 +64,7 @@ while True:
 
     line = ser.readline().strip()
     logging.debug("Serial <- '%s'", line)  # discard the ending space
-    if (line != 'D90'):
+    if (line != 'D'):
       logging.error("Bad response from bootloader")
       exit()
 

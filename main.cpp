@@ -17,8 +17,8 @@
 #include "ActivityLED.h"
 #include "isp_f303k8.h"
 
-Serial uart(SERIAL_TX, SERIAL_RX);
-Serial uart_in(D1, D0);
+RawSerial uart(SERIAL_TX, SERIAL_RX);
+RawSerial uart_in(D1, D0);
 
 DigitalIn bootInPin(D3, PullDown);
 DigitalOut bootOutPin(D6);
@@ -216,8 +216,6 @@ int bootloaderMaster() {
     numDevices += 1;
   }
 
-  uart.printf("Discovered %i devices\n", numDevices);
-
   statusLED.setIdlePolarity(true);
 
   Timer heartbeatTimer;
@@ -236,7 +234,11 @@ int bootloaderMaster() {
 
       if (result == COBSDecoder::kResultDone) {
         BootProto::RespStatus status = process_bootloader_command(isp, i2c, packet);
-        uart.printf("D%i\n", status);
+        if (status == BootProto::kRespDone) {
+          uart.puts("D\n");
+        } else {
+          uart.puts("N\n");
+        }
         packet.reset();
         decoder.set_buffer(&packet);
       }

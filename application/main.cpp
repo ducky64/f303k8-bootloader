@@ -15,7 +15,7 @@ DigitalOut mainLed(LED1);
 DigitalIn bootInPin(D3, PullDown);
 
 int main() {
-  Serial uart(SERIAL_TX, SERIAL_RX);
+  RawSerial uart(SERIAL_TX, SERIAL_RX);
   uart.baud(115200);
   uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ ")\r\n");
 
