@@ -25,17 +25,17 @@ DigitalOut bootOutPin(D6);
 
 ActivityLED statusLED(LED1);
 
-const uint32_t I2C_FREQUENCY = 400000;
+const uint32_t kI2CFrequency = 400000;
 
-const uint32_t LED_PULSE_TIME = 50;
+const uint32_t kActivityPulseTimeMs = 50;
 
-const uint32_t HEARTBEAT_PERIOD = 1000;
-const uint32_t HEARTBEAT_INIT_PERIOD = 500;
-const uint32_t HEARTBEAT_PULSE_TIME = LED_PULSE_TIME;
+const uint32_t kHeartbeatPeriodMs = 1000;
+const uint32_t kInitHeartbeatPeriodMs = 500;
+const uint32_t kHeartbeatPulseTimeMs = kActivityPulseTimeMs;
 
 extern char _FlashStart, _FlashEnd;
-void* const BL_BEGIN_PTR = &_FlashStart;
-void* const APP_BEGIN_PTR = &_FlashEnd;
+void* const kBootloaderBeginPtr = &_FlashStart;
+void* const kAppBeginPtr = &_FlashEnd;
 
 /**
  * Runs an application at the specified address. Should not return under normal
@@ -86,7 +86,7 @@ BootProto::RespStatus get_slave_status(I2C &i2c, uint8_t device) {
   while (resp == BootProto::kRespBusy) {
     i2cData[0] = BootProto::kCmdStatus;
     // TODO: debug why I2C device resets are necessary...
-    i2c.frequency(I2C_FREQUENCY); // reset the I2C device
+    i2c.frequency(kI2CFrequency); // reset the I2C device
     i2c.write(BootProto::GetDeviceAddr(device), (char*)i2cData, 1);
     i2c.read(BootProto::GetDeviceAddr(device), (char*)i2cData, 1);
     resp = (BootProto::RespStatus)i2cData[0];
@@ -187,7 +187,7 @@ int bootloaderMaster() {
   I2C i2c(D4, D5);
   uint8_t i2cData[BootProto::kMaxPayloadLength];
 
-  i2c.frequency(I2C_FREQUENCY);
+  i2c.frequency(kI2CFrequency);
 
   bootOutPin = 1;
 
@@ -195,7 +195,7 @@ int bootloaderMaster() {
   while (1) {
     wait_ms(BootProto::kBootToAddrDelayMs);
 
-    i2c.frequency(I2C_FREQUENCY); // reset the I2C device
+    i2c.frequency(kI2CFrequency); // reset the I2C device
     i2cData[0] = BootProto::kCmdPing;
     if (i2c.write(BootProto::kAddressGlobal, (char*)i2cData, 1, true) != 0) {
       // Next device in chain didn't respond to ping, reached end of chain
@@ -241,13 +241,13 @@ int bootloaderMaster() {
         decoder.set_buffer(&packet);
       }
 
-      statusLED.pulse(LED_PULSE_TIME);
+      statusLED.pulse(kActivityPulseTimeMs);
     }
 
     statusLED.update();
     if (heartbeatTimer.read_ms() >= nextHeartbeatTime) {
-      nextHeartbeatTime += HEARTBEAT_PERIOD;
-      statusLED.pulse(HEARTBEAT_PULSE_TIME);
+      nextHeartbeatTime += kHeartbeatPeriodMs;
+      statusLED.pulse(kHeartbeatPulseTimeMs);
     }
   }
   return 0;
@@ -268,15 +268,15 @@ int bootloaderSlaveInit() {
 
     statusLED.update();
     if (heartbeatTimer.read_ms() >= nextHeartbeatTime) {
-      nextHeartbeatTime += HEARTBEAT_INIT_PERIOD;
-      statusLED.pulse(HEARTBEAT_PULSE_TIME);
+      nextHeartbeatTime += kInitHeartbeatPeriodMs;
+      statusLED.pulse(kHeartbeatPulseTimeMs);
     }
   }
 
   statusLED.setIdlePolarity(true);
 
   I2CSlave i2c(D4, D5);
-  i2c.frequency(I2C_FREQUENCY);
+  i2c.frequency(kI2CFrequency);
   i2c.address(BootProto::kAddressGlobal);
   uint8_t address = BootProto::kAddressGlobal;
 
@@ -311,8 +311,8 @@ int bootloaderSlaveInit() {
 
     statusLED.update();
     if (heartbeatTimer.read_ms() >= nextHeartbeatTime) {
-      nextHeartbeatTime += HEARTBEAT_INIT_PERIOD;
-      statusLED.pulse(HEARTBEAT_PULSE_TIME);
+      nextHeartbeatTime += kInitHeartbeatPeriodMs;
+      statusLED.pulse(kHeartbeatPulseTimeMs);
     }
   }
 
@@ -332,12 +332,12 @@ int bootloaderSlaveInit() {
     }
 
     if (isp.async_update()) {
-      statusLED.pulse(LED_PULSE_TIME);
+      statusLED.pulse(kActivityPulseTimeMs);
     }
 
     switch (i2c.receive()) {
     case I2CSlave::ReadAddressed:
-      statusLED.pulse(LED_PULSE_TIME);
+      statusLED.pulse(kActivityPulseTimeMs);
       if (lastI2CCommand == BootProto::kCmdPing) {
         i2c.write(BootProto::kRespDone);
       } else if (lastI2CCommand == BootProto::kCmdStatus) {
@@ -358,7 +358,7 @@ int bootloaderSlaveInit() {
       break;
 
     case I2CSlave::WriteAddressed:
-      statusLED.pulse(LED_PULSE_TIME);
+      statusLED.pulse(kActivityPulseTimeMs);
       lastI2CCommand = i2c.read();
       if (lastI2CCommand == BootProto::kCmdSetBootOut) {
         bootOutPin = 1;
@@ -406,8 +406,8 @@ int bootloaderSlaveInit() {
 
     statusLED.update();
     if (heartbeatTimer.read_ms() >= nextHeartbeatTime) {
-      nextHeartbeatTime += HEARTBEAT_PERIOD;
-      statusLED.pulse(HEARTBEAT_PULSE_TIME);
+      nextHeartbeatTime += kHeartbeatPeriodMs;
+      statusLED.pulse(kHeartbeatPulseTimeMs);
     }
   }
 }
