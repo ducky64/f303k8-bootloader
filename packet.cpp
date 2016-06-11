@@ -1,102 +1,131 @@
 #include "packet.h"
 
-namespace internal {
-  template<> size_t buf_put<uint8_t>(uint8_t* loc, size_t max_len, uint8_t data) {
-    if (max_len < 1) {
-      return 0;
-    }
-    *loc = data;
-    return 1;
-  }
+template<> bool PacketBuilder::put<uint8_t>(uint8_t data) {
+  return put_uint8(data);
+}
 
-  template<> size_t buf_put<uint16_t>(uint8_t* loc, size_t max_len, uint16_t data) {
-    if (max_len < 2) {
-      return 0;
-    }
-    *(loc + 0) = (data >> 8) & 0xff;
-    *(loc + 1) = (data >> 0) & 0xff;
-    return 2;
-  }
+template<> bool PacketBuilder::put<uint16_t>(uint16_t data) {
+  return put_uint16(data);
+}
 
-  template<> size_t buf_put<uint32_t>(uint8_t* loc, size_t max_len, uint32_t data) {
-    if (max_len < 4) {
-      return 0;
-    }
-    *(loc + 0) = (data >> 24) & 0xff;
-    *(loc + 1) = (data >> 16) & 0xff;
-    *(loc + 2) = (data >> 8) & 0xff;
-    *(loc + 3) = (data >> 0) & 0xff;
-    return 4;
-  }
+template<> bool PacketBuilder::put<uint32_t>(uint32_t data) {
+  return put_uint32(data);
+}
 
-  template<> size_t buf_put<float>(uint8_t* loc, size_t max_len, float data) {
-    if (max_len < 4) {
-      return 0;
-    }
-    // TODO: check if this is platform dependent, perhaps abstract elsewhere
-    uint8_t *float_array = reinterpret_cast<uint8_t*>(&data);
-    *(loc + 0) = float_array[3];
-    *(loc + 1) = float_array[2];
-    *(loc + 2) = float_array[1];
-    *(loc + 3) = float_array[0];
-    return 4;
+template<> bool PacketBuilder::put<float>(float data) {
+  return put_float(data);
+}
+
+bool BufferedPacketBuilder::put_uint8(uint8_t data) {
+  if (getFreeBytes() < 1) {
+    return false;
   }
+  *writePtr = data;
+  writePtr += 1;
+  return true;
+}
+
+bool BufferedPacketBuilder::put_uint16(uint16_t data) {
+  if (getFreeBytes() < 2) {
+    return false;
+  }
+  writePtr[0] = (data >> 8) & 0xff;
+  writePtr[1] = (data >> 0) & 0xff;
+  writePtr += 2;
+  return true;
+}
+
+bool BufferedPacketBuilder::put_uint32(uint32_t data) {
+  if (getFreeBytes() < 4) {
+    return false;
+  }
+  writePtr[0] = (data >> 24) & 0xff;
+  writePtr[1] = (data >> 16) & 0xff;
+  writePtr[2] = (data >> 8) & 0xff;
+  writePtr[3] = (data >> 0) & 0xff;
+  writePtr += 4;
+  return true;
+}
+
+bool BufferedPacketBuilder::put_float(float data) {
+  if (getFreeBytes() < 4) {
+    return false;
+  }
+  // TODO: check if this is platform dependent, perhaps abstract elsewhere
+  uint8_t *float_array = reinterpret_cast<uint8_t*>(&data);
+  writePtr[0] = float_array[3];
+  writePtr[1] = float_array[2];
+  writePtr[2] = float_array[1];
+  writePtr[3] = float_array[0];
+  writePtr += 4;
+  return true;
 }
 
 template<> uint8_t PacketReader::read<uint8_t>() {
-  return read_uint8();
+  uint8_t out;
+  read_uint8(&out);
+  return out;
 }
 
 template<> uint16_t PacketReader::read<uint16_t>() {
-  return read_uint16();
+  uint16_t out;
+  read_uint16(&out);
+  return out;
 }
 
 template<> uint32_t PacketReader::read<uint32_t>() {
-  return read_uint32();
+  uint32_t out;
+  read_uint32(&out);
+  return out;
 }
 
 template<> float PacketReader::read<float>() {
-  return read_float();
+  float out;
+  read_float(&out);
+  return out;
 }
 
-uint8_t BufferedPacketReader::read_uint8() {
+bool BufferedPacketReader::read_uint8(uint8_t* out) {
   if (getRemainingBytes() < 1) {
-    return 0;
+    return false;
   }
+  *out = readPtr[0];
   readPtr += 1;
-  return readPtr[-1];
+  return true;
 }
-uint16_t BufferedPacketReader::read_uint16() {
+bool BufferedPacketReader::read_uint16(uint16_t* out) {
   if (getRemainingBytes() < 2) {
-    return 0;
+    return false;
   }
-  return ((uint16_t)readPtr[-2] << 8)
-       | ((uint16_t)readPtr[-1] << 0);
+  *out = ((uint16_t)readPtr[0] << 8)
+       | ((uint16_t)readPtr[1] << 0);
+  readPtr += 2;
+  return true;
 }
-uint32_t BufferedPacketReader::read_uint32() {
+bool BufferedPacketReader::read_uint32(uint32_t* out) {
   if (getRemainingBytes() < 4) {
-    return 0;
+    return false;
   }
+  *out = ((uint16_t)readPtr[0] << 24)
+       | ((uint16_t)readPtr[1] << 16)
+       | ((uint16_t)readPtr[2] << 8)
+       | ((uint16_t)readPtr[3] << 0);
   readPtr += 4;
-  return ((uint16_t)readPtr[-4] << 24)
-       | ((uint16_t)readPtr[-3] << 16)
-       | ((uint16_t)readPtr[-2] << 8)
-       | ((uint16_t)readPtr[-1] << 0);
+  return true;
 }
 
-float BufferedPacketReader::read_float() {
+bool BufferedPacketReader::read_float(float* out) {
   if (getRemainingBytes() < 4) {
-    return 0;
+    return false;
   }
-  float data_out;
-  uint8_t* data_out_bytes = reinterpret_cast<uint8_t*>(&data_out);
+  uint8_t* out_bytes = reinterpret_cast<uint8_t*>(out);
   // TODO: check if this is platform dependent, perhaps abstract elsewhere
-  data_out_bytes[0] = readPtr[3];
-  data_out_bytes[1] = readPtr[2];
-  data_out_bytes[2] = readPtr[1];
-  data_out_bytes[3] = readPtr[0];
+  out_bytes[0] = readPtr[3];
+  out_bytes[1] = readPtr[2];
+  out_bytes[2] = readPtr[1];
+  out_bytes[3] = readPtr[0];
   readPtr += 4;
 
-  return data_out;
+  return true;
 }
 
