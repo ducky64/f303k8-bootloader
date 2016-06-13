@@ -191,7 +191,7 @@ int bootloaderMaster() {
     wait_ms(BootProto::kBootToAddrDelayMs);
 
     i2c.frequency(kI2CFrequency); // reset the I2C device
-    i2cData[0] = BootProto::kCmdPing;
+    i2cData[0] = BootProto::kCmdStatus;
     if (i2c.write(BootProto::kAddressGlobal, (char*)i2cData, 1, true) != 0) {
       // Next device in chain didn't respond to ping, reached end of chain
       break;
@@ -287,7 +287,7 @@ int bootloaderSlaveInit() {
 
     switch (i2c.receive()) {
     case I2CSlave::ReadAddressed:
-      if (lastCommand == BootProto::kCmdPing) {
+      if (lastCommand == BootProto::kCmdStatus) {
         i2c.write(BootProto::kRespDone);
       } else {
         // Drop everything else
@@ -335,9 +335,7 @@ int bootloaderSlaveInit() {
     switch (i2c.receive()) {
     case I2CSlave::ReadAddressed:
       statusLED.pulse(kActivityPulseTimeMs);
-      if (lastCommand == BootProto::kCmdPing) {
-        i2c.write(BootProto::kRespDone);
-      } else if (lastCommand == BootProto::kCmdStatus) {
+      if (lastCommand == BootProto::kCmdStatus) {
         if (lastStatus == BootProto::kRespDone) {
           ISPBase::ISPStatus ispStatus;
           if (isp.get_last_async_status(&ispStatus)) {

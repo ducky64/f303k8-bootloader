@@ -10,10 +10,9 @@ namespace BootProto {
   const size_t kMaxPayloadLength = 512; // TODO: size this more optimally
 
   enum BootCommand {
-    // kCmdPing
-    // <- kRespDone
-    // Global and addressed mode.
-    kCmdPing = 0x08,
+    // kCmdStatus
+    // <- RespStatus
+    kCmdStatus = 0x08,
 
     // kCmdSetAddress (uint8 newAddress)
     // Global mode only. Sets the I2C address of the device.
@@ -37,10 +36,6 @@ namespace BootProto {
     // Runs the program beginning at the specified address. Not a simple jump,
     // also sets up the initial PC, stack pointer, and vector table pointer.
     kCmdRunApp,
-
-    // kCmdStatus
-    // <- RespStatus
-    kCmdStatus,
 
     kCmdInvalid
   };
