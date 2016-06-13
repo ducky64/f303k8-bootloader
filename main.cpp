@@ -277,7 +277,7 @@ int bootloaderSlaveInit() {
   i2c.address(BootProto::kAddressGlobal);
   uint8_t address = BootProto::kAddressGlobal;
 
-  uint8_t lastI2CCommand = 0;
+  BootProto::BootCommand lastCommand = BootProto::kCmdInvalid;
 
   // Wait for initialization I2C command to get address
   while (address == BootProto::kAddressGlobal) {
@@ -287,15 +287,15 @@ int bootloaderSlaveInit() {
 
     switch (i2c.receive()) {
     case I2CSlave::ReadAddressed:
-      if (lastI2CCommand == BootProto::kCmdPing) {
+      if (lastCommand == BootProto::kCmdPing) {
         i2c.write(BootProto::kRespDone);
       } else {
         // Drop everything else
       }
       break;
     case I2CSlave::WriteAddressed:
-      lastI2CCommand = i2c.read();
-      if (lastI2CCommand == BootProto::kCmdSetAddress) {
+      lastCommand = (BootProto::BootCommand)i2c.read();
+      if (lastCommand == BootProto::kCmdSetAddress) {
         uint8_t payload = i2c.read();
         if (payload != -1) {
           address = payload;
@@ -335,9 +335,9 @@ int bootloaderSlaveInit() {
     switch (i2c.receive()) {
     case I2CSlave::ReadAddressed:
       statusLED.pulse(kActivityPulseTimeMs);
-      if (lastI2CCommand == BootProto::kCmdPing) {
+      if (lastCommand == BootProto::kCmdPing) {
         i2c.write(BootProto::kRespDone);
-      } else if (lastI2CCommand == BootProto::kCmdStatus) {
+      } else if (lastCommand == BootProto::kCmdStatus) {
         if (lastStatus == BootProto::kRespDone) {
           ISPBase::ISPStatus ispStatus;
           if (isp.get_last_async_status(&ispStatus)) {
@@ -356,11 +356,11 @@ int bootloaderSlaveInit() {
 
     case I2CSlave::WriteAddressed:
       statusLED.pulse(kActivityPulseTimeMs);
-      lastI2CCommand = i2c.read();
+      lastCommand = (BootProto::BootCommand)i2c.read();
       i2cPacket.reset();
-      if (lastI2CCommand == BootProto::kCmdSetBootOut) {
+      if (lastCommand == BootProto::kCmdSetBootOut) {
         bootOutPin = 1;
-      } else if (lastI2CCommand == BootProto::kCmdErase) {
+      } else if (lastCommand == BootProto::kCmdErase) {
         if (!i2c.read((char*)i2cPacket.ptrPutBytes(8), 8)) {
           uint32_t startAddr = i2cPacket.read<uint32_t>();
           uint32_t len = i2cPacket.read<uint32_t>();
@@ -370,7 +370,7 @@ int bootloaderSlaveInit() {
         } else {
           lastStatus = BootProto::kRespInvalidFormat;
         }
-      } else if (lastI2CCommand == BootProto::kCmdWrite) {
+      } else if (lastCommand == BootProto::kCmdWrite) {
         if (!i2c.read((char*)i2cPacket.ptrPutBytes(10), 10)) {
           uint32_t startAddr = i2cPacket.read<uint32_t>();
           uint16_t len = i2cPacket.read<uint16_t>();
@@ -392,7 +392,7 @@ int bootloaderSlaveInit() {
         } else {
           lastStatus = BootProto::kRespInvalidFormat;
         }
-      } else if (lastI2CCommand == BootProto::kCmdRunApp) {
+      } else if (lastCommand == BootProto::kCmdRunApp) {
         if (!i2c.read((char*)i2cPacket.ptrPutBytes(4), 4)) {
           uint32_t addr = i2cPacket.read<uint32_t>();
           isp.isp_end();

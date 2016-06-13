@@ -9,46 +9,50 @@ namespace BootProto {
 
   const size_t kMaxPayloadLength = 512; // TODO: size this more optimally
 
-  // kCmdPing
-  // <- kRespDone
-  // Global and addressed mode.
-  const uint8_t kCmdPing = 0x02;
+  enum BootCommand {
+    // kCmdPing
+    // <- kRespDone
+    // Global and addressed mode.
+    kCmdPing = 0x08,
 
-  // kCmdSetAddress (uint8 newAddress)
-  // Global mode only. Sets the I2C address of the device.
-  const uint8_t kCmdSetAddress = 0x04;
+    // kCmdSetAddress (uint8 newAddress)
+    // Global mode only. Sets the I2C address of the device.
+    kCmdSetAddress,
 
-  // kCmdSetBootOut
-  // Sets the boot out pin high.
-  const uint8_t kCmdSetBootOut = 0x03;
+    // kCmdSetBootOut
+    // Sets the boot out pin high.
+    kCmdSetBootOut = 0x10,
 
-  // kCmdErase (uint32 startAddress) (uint32 length)
-  // Erases a block.
-  const uint8_t kCmdErase = 0x06;
+    // kCmdErase (uint32 startAddress) (uint32 length)
+    // Erases a block.
+    kCmdErase,
 
-  // kCmdWrite (uint32 startAddress) (uint16 length) (uint16 CRC16)
-  //   (length*uint8 data)
-  // Writes data of length starting at the specified address.
-  // CRC is of the data only.
-  const uint8_t kCmdWrite = 0x07;
+    // kCmdWrite (uint32 startAddress) (uint16 length) (uint16 CRC16)
+    //   (length*uint8 data)
+    // Writes data of length starting at the specified address.
+    // CRC is of the data only.
+    kCmdWrite,
 
-  // kCmdRunApp (uint32 address)
-  // Runs the program beginning at the specified address. Not a simple jump,
-  // also sets up the initial PC, stack pointer, and vector table pointer.
-  const uint8_t kCmdRunApp = 0x08;
+    // kCmdRunApp (uint32 address)
+    // Runs the program beginning at the specified address. Not a simple jump,
+    // also sets up the initial PC, stack pointer, and vector table pointer.
+    kCmdRunApp,
 
-  // kCmdStatus
-  // <- RespStatus
-  const uint8_t kCmdStatus = 0x10;
+    // kCmdStatus
+    // <- RespStatus
+    kCmdStatus,
+
+    kCmdInvalid
+  };
 
   enum RespStatus {
     kRespBusy = 0x00,
-    kRespDone = 0x5A,
     kRespInvalidFormat = 0x10,
     kRespInvalidArgs,
     kRespInvalidChecksum,
     kRespFlashError,
-    kRespUnknownError
+    kRespUnknownError,
+    kRespDone = 0x5A
   };
 
   // Given the device number (position in chain), return the mbed-style I2C
