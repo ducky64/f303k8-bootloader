@@ -28,7 +28,7 @@ env.Append(CCFLAGS = ['-Werror', '-Wall'])
 
 bootloader = env.Program(
   target = '../bootloader',
-  source = Glob('*.cpp'),
+  source = Glob('bootloader/*.cpp'),
 )
 env.Depends(bootloader, 'mbed-overrides/stm32f303k8-bootloader/STM32F303X8.ld')
 env.Objcopy(bootloader)
