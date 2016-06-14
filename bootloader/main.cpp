@@ -26,7 +26,7 @@ ActivityLED statusLED(LED1);
 
 const uint32_t kI2CFrequency = 400000;
 
-const uint32_t kActivityPulseTimeMs = 50;
+const uint32_t kActivityPulseTimeMs = 25;
 
 const uint32_t kHeartbeatPeriodMs = 1000;
 const uint32_t kInitHeartbeatPeriodMs = 500;
