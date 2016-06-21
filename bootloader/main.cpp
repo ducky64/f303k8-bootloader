@@ -17,7 +17,6 @@
 #include "isp_f303k8.h"
 
 RawSerial uart(SERIAL_TX, SERIAL_RX);
-RawSerial uart_in(D1, D0);
 
 DigitalIn bootInPin(D3, PullDown);
 DigitalOut bootOutPin(D6);
@@ -222,8 +221,12 @@ int bootloaderMaster() {
   decoder.set_buffer(&packet);
 
   while (1) {
-    while (uart.readable() || uart_in.readable()) {
-      uint8_t rx = uart.readable() ? (uint8_t)uart.getc() : (uint8_t)uart_in.getc();
+    if (bootInPin == 0) {
+      NVIC_SystemReset();
+    }
+
+    while (uart.readable()) {
+      uint8_t rx = (uint8_t)uart.getc();
       size_t bytes_decoded;
       COBSDecoder::COBSResult result = decoder.decode(&rx, 1, &bytes_decoded);
 
@@ -414,7 +417,6 @@ int main() {
   bootOutPin = 0;
 
   uart.baud(115200);
-  uart_in.baud(115200);
   uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ ")\r\n");
 
   wait_ms(BootProto::kBootscanDelayMs);  // wait for some time to let boot in stabilize

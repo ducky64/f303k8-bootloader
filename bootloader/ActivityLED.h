@@ -65,6 +65,8 @@ public:
       nextResetEdge = nextIdleEdge + nextResetLength;
       nextPulseLength = 0;
       inPulse = true;
+    } else {
+      led = idleValue;
     }
   }
 

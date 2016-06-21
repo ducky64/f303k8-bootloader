@@ -12,8 +12,8 @@ CHUNK_SIZE = 128
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%H:%M:%S', level=logging.INFO)
 
 parser = argparse.ArgumentParser(description='Bootloader host')
-parser.add_argument('bin_file', type=str,
-                    help='bin file to load')
+parser.add_argument('bin_files', type=str, nargs='+',
+                    help='bin files to load')
 parser.add_argument('serial', type=str,
                     help='serial port to use, like COM1 (Windows) or /dev/ttyACM0 (Linux)')
 parser.add_argument('--baud', type=int, default=115200,
@@ -94,10 +94,13 @@ class BootloaderComms(object):
 
 bootloader = BootloaderComms(ser)
 
+assert len(args.devices) == len(args.bin_files)
+
 # TODO: ensure device 0 isn't programmed except at end
 
-for device in args.devices:
-  bin_file = open(args.bin_file, 'r')
+for device, bin_filename in zip(args.devices, args.bin_files):
+  logging.info("Programming '%s' onto device %i", bin_filename, device)
+  bin_file = open(bin_filename, 'r')
   bootloader.program_and_run(device, args.memsize, args.address, bin_file)
   bin_file.close()
 
