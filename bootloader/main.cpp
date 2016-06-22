@@ -18,12 +18,13 @@
 
 RawSerial uart(SERIAL_TX, SERIAL_RX);
 
+DigitalIn masterRunAppPin(D2, PullUp);
 DigitalIn bootInPin(D3, PullDown);
 DigitalOut bootOutPin(D6);
 
 ActivityLED statusLED(LED1);
 
-const uint32_t kI2CFrequency = 400000;
+const uint32_t kI2CFrequency = 1000000;
 
 const uint32_t kActivityPulseTimeMs = 25;
 
@@ -208,6 +209,18 @@ int bootloaderMaster() {
     i2c.write(thisDeviceAddress, (char*)i2cData, 1);
 
     numDevices += 1;
+  }
+
+  if (!masterRunAppPin) {
+    for (size_t i=0; i<numDevices; i++) {
+      BufferedPacketBuilder<BootProto::kMaxPayloadLength> i2cPacket;
+      i2cPacket.put<uint8_t>(BootProto::kCmdRunApp);
+      // TODO: allow heterogeneous systems, use relative addressing
+      i2cPacket.put<uint32_t>((uint32_t)kAppBeginPtr);
+      i2c.write(BootProto::GetDeviceAddr(i),
+          (char*)i2cPacket.getBuffer(), i2cPacket.getLength());
+    }
+    runApp((void*)kAppBeginPtr);
   }
 
   statusLED.setIdlePolarity(true);
