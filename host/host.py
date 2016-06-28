@@ -25,7 +25,7 @@ parser.add_argument('--address', type=int, default=0x8000000 + 16*1024,
 parser.add_argument('--memsize', type=int, default=48*1024,
                     help='memory size')
 parser.add_argument('--devices', type=int, nargs='+',
-                    help='device number, 0 is master, slaves start at 1 (optional, implicitly 0...len(bin_files)-1)')
+                    help='device number, 0 is master, slaves start at 1 (optional, defaults to 0...len(bin_files)-1)')
 
 args = parser.parse_args()
 
