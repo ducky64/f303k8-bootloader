@@ -1,7 +1,9 @@
 import argparse
 import binascii
 import logging
+import os
 import serial
+import sys
 import time
 
 from duckycobs import *
@@ -23,12 +25,27 @@ parser.add_argument('--address', type=int, default=0x8000000 + 16*1024,
 parser.add_argument('--memsize', type=int, default=48*1024,
                     help='memory size')
 parser.add_argument('--devices', type=int, nargs='+',
-                    help='device number, 0 is master, slaves start at 1')
+                    help='device number, 0 is master, slaves start at 1 (option, implicitly 0...len(bin_files)-1)')
 
 args = parser.parse_args()
 
 ser = serial.Serial(args.serial, args.baud)
 logging.info("Opened serial port '%s'", args.serial)
+
+def pbar(curr, max, sym='=', space=' ', arrow='>', nsyms=32):
+  assert curr <= max
+  if curr == 0:
+    combined = space * nsyms
+  elif curr == max:
+    combined = sym * nsyms
+  else:
+    syms = curr * nsyms / max
+    if syms > 0:
+      combined = (syms-1) * sym + arrow + (nsyms - syms) * space
+    else:
+      combined = arrow + (nsyms-1) * space
+
+  return "[{0}] {1}/{2}".format(combined, curr, max)
 
 # General exception when the bootloader returns a non-success error code.
 class BootloaderResponseError(Exception):
@@ -71,37 +88,64 @@ class BootloaderComms(object):
     packet.put_uint32(address)
     self.command(packet, reply_expected=False)
 
-  def program_and_run(self, device, memsize, address, program_bin):
+  def program(self, device, memsize, address, program_bin_filename):
     time.sleep(0.1) # wait for some time to initialize the serial object, otherwise the initial flush doesn't work
     bytes_read = ser.read(ser.inWaiting())
     logging.debug("Serial: flushed %i bytes", len(bytes_read))
 
+    logging.info("Erase %i bytes from device %i ...", memsize, device)
+    start = time.time()
     self.erase(device, address, memsize)
-    logging.info("Erased %i bytes from device %i", memsize, device)
+    logging.info("  done (%s s)", time.time() - start)
     curr_address = address
 
+    program_size = os.path.getsize(program_bin_filename)
+    curr_file_loc = 0
+    program_bin = open(program_bin_filename, 'r')
+    logging.info("Write %i bytes to device %i", program_size, device)
+    sys.stdout.write("...")
+    start = time.time()
     while True:
       chunk = program_bin.read(CHUNK_SIZE)
       if chunk:
         self.write(device, curr_address, chunk)
         curr_address += len(chunk)
+        curr_file_loc += len(chunk)
+        sys.stdout.write('\r' + pbar(curr_file_loc, program_size))
+        sys.stdout.flush()
       else:
         break
-    logging.info("Write %i bytes to device %i", curr_address - address, device)
+    sys.stdout.write('\n')
+    elapsed = time.time() - start
+    logging.info("  done (%.03f s, %.03fKiB/s)", elapsed, program_size / 1024.0 / elapsed)
 
-    self.run_app(device, address)
-    logging.info("Started app on device %i", device)
+    program_bin.close()
 
 bootloader = BootloaderComms(ser)
 
-assert len(args.devices) == len(args.bin_files)
+if not args.devices:
+  devices = xrange(0, len(args.bin_files))
+else :
+  devices = args.devices
+
+assert len(devices) == len(args.bin_files)
+
+
 
 # TODO: ensure device 0 isn't programmed except at end
 
-for device, bin_filename in zip(args.devices, args.bin_files):
+for device, bin_filename in zip(devices, args.bin_files):
   logging.info("Programming '%s' onto device %i", bin_filename, device)
-  bin_file = open(bin_filename, 'r')
-  bootloader.program_and_run(device, args.memsize, args.address, bin_file)
-  bin_file.close()
+
+  bootloader.program(device, args.memsize, args.address, bin_filename)
+
+for device in devices:
+  if device != 0:
+    logging.info("Start app on device %i", device)
+    bootloader.run_app(device, args.address)
+
+if 0 in devices:
+    logging.info("Start app on device 0")
+    bootloader.run_app(0, args.address)
 
 ser.close()
