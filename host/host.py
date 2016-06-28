@@ -1,6 +1,7 @@
 import argparse
 import binascii
 import logging
+import math
 import os
 import serial
 import sys
@@ -10,6 +11,7 @@ from duckycobs import *
 from duckypacket import *
 
 CHUNK_SIZE = 128
+ERASE_SIZE = 2048
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%H:%M:%S', level=logging.INFO)
 
@@ -104,13 +106,15 @@ class BootloaderComms(object):
     bytes_read = ser.read(ser.inWaiting())
     logging.debug("Serial: flushed %i bytes", len(bytes_read))
 
-    logging.info("Erase %i bytes from device %i ...", memsize, device)
+    program_size = os.path.getsize(program_bin_filename)
+    erase_size = int(math.ceil(program_size / float(ERASE_SIZE)) * ERASE_SIZE)
+
+    logging.info("Erase %i bytes from device %i ...", erase_size, device)
     start = time.time()
-    self.erase(device, address, memsize)
+    self.erase(device, address, erase_size)
     logging.info("  done (%s s)", time.time() - start)
     curr_address = address
 
-    program_size = os.path.getsize(program_bin_filename)
     curr_file_loc = 0
     program_bin = open(program_bin_filename, 'r')
     logging.info("Write %i bytes to device %i", program_size, device)
