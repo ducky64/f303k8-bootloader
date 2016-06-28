@@ -25,11 +25,11 @@ parser.add_argument('--address', type=int, default=0x8000000 + 16*1024,
 parser.add_argument('--memsize', type=int, default=48*1024,
                     help='memory size')
 parser.add_argument('--devices', type=int, nargs='+',
-                    help='device number, 0 is master, slaves start at 1 (option, implicitly 0...len(bin_files)-1)')
+                    help='device number, 0 is master, slaves start at 1 (optional, implicitly 0...len(bin_files)-1)')
 
 args = parser.parse_args()
 
-ser = serial.Serial(args.serial, args.baud)
+ser = serial.Serial(args.serial, args.baud, timeout=1)
 logging.info("Opened serial port '%s'", args.serial)
 
 def pbar(curr, max, sym='=', space=' ', arrow='>', nsyms=32):
@@ -52,17 +52,28 @@ class BootloaderResponseError(Exception):
   pass
 
 class BootloaderComms(object):
-  def __init__(self, ser):
+  def __init__(self, ser, retries=3):
     self.serial = ser
     self.serial.write(b'\x00')
+    self.retries = retries
 
   def command(self, packet, reply_expected=True):
-    self.serial.write(cobs_encode(packet.get_bytes()) + b'\x00')
-    if reply_expected:
-      line = ser.readline().strip()
-      logging.debug("Serial <- '%s'", line)  # discard the ending space
-      if (line != 'D'):
-        raise BootloaderResponseError("Got '%s' error code from bootloader" % line)
+    retry = 0
+    while retry <= self.retries:
+      if retry > 0:
+        logging.error("Retrying command (try %i of max %i)", retry, self.retries)
+      self.serial.write(cobs_encode(packet.get_bytes()) + b'\x00')
+      if reply_expected:
+        line = ser.readline().strip()
+        logging.debug("Serial <- '%s'", line)  # discard the ending space
+        if (line == 'D'):
+          return
+        else:
+          logging.error("Got response '%s' from bootloader", line)
+          retry += 1
+      else:
+        return
+    raise BootloaderResponseError("Hit max retries for command")
 
   def erase(self, device, address, length):
     packet = PacketBuilder()
@@ -127,12 +138,7 @@ if not args.devices:
   devices = xrange(0, len(args.bin_files))
 else :
   devices = args.devices
-
 assert len(devices) == len(args.bin_files)
-
-
-
-# TODO: ensure device 0 isn't programmed except at end
 
 for device, bin_filename in zip(devices, args.bin_files):
   logging.info("Programming '%s' onto device %i", bin_filename, device)
