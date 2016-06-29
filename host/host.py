@@ -139,7 +139,7 @@ class BootloaderComms(object):
 bootloader = BootloaderComms(ser)
 
 if not args.devices:
-  devices = xrange(0, len(args.bin_files))
+  devices = range(0, len(args.bin_files))
 else :
   devices = args.devices
 assert len(devices) == len(args.bin_files)
