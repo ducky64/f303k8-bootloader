@@ -41,7 +41,7 @@ def pbar(curr, max, sym='=', space=' ', arrow='>', nsyms=32):
   elif curr == max:
     combined = sym * nsyms
   else:
-    syms = curr * nsyms / max
+    syms = int(curr * nsyms / max)
     if syms > 0:
       combined = (syms-1) * sym + arrow + (nsyms - syms) * space
     else:
@@ -68,7 +68,7 @@ class BootloaderComms(object):
       if reply_expected:
         line = ser.readline().strip()
         logging.debug("Serial <- '%s'", line)  # discard the ending space
-        if (line == 'D'):
+        if (line == b'D'):
           return
         else:
           logging.error("Got response '%s' from bootloader", line)
@@ -116,7 +116,7 @@ class BootloaderComms(object):
     curr_address = address
 
     curr_file_loc = 0
-    program_bin = open(program_bin_filename, 'r')
+    program_bin = open(program_bin_filename, 'rb')
     logging.info("Write %i bytes to device %i", program_size, device)
     sys.stdout.write("...")
     start = time.time()
