@@ -16,7 +16,8 @@
 #include "ActivityLED.h"
 #include "isp_f303k8.h"
 
-RawSerial uart(SERIAL_TX, SERIAL_RX);
+RawSerial usb_uart(SERIAL_TX, SERIAL_RX);
+RawSerial ext_uart(D1, D0);
 
 DigitalIn masterRunAppPin(D2, PullUp);
 DigitalIn bootInPin(D3, PullDown);
@@ -238,17 +239,19 @@ int bootloaderMaster() {
       NVIC_SystemReset();
     }
 
-    while (uart.readable()) {
-      uint8_t rx = (uint8_t)uart.getc();
+    while (usb_uart.readable() || ext_uart.readable()) {
+      uint8_t rx = usb_uart.readable() ? (uint8_t)usb_uart.getc() : (uint8_t)ext_uart.getc();
       size_t bytes_decoded;
       COBSDecoder::COBSResult result = decoder.decode(&rx, 1, &bytes_decoded);
 
       if (result == COBSDecoder::kResultDone) {
         BootProto::RespStatus status = process_bootloader_command(isp, i2c, packet);
         if (status == BootProto::kRespDone) {
-          uart.puts("D\n");
+          usb_uart.puts("D\n");
+          ext_uart.puts("D\n");
         } else {
-          uart.puts("N\n");
+          usb_uart.puts("N\n");
+          ext_uart.puts("N\n");
         }
         packet.reset();
         decoder.set_buffer(&packet);
@@ -429,8 +432,10 @@ int bootloaderSlaveInit() {
 int main() {
   bootOutPin = 0;
 
-  uart.baud(115200);
-  uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ ")\r\n");
+  usb_uart.baud(115200);
+  usb_uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ ")\r\n");
+  ext_uart.baud(115200);
+  ext_uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ ")\r\n");
 
   wait_ms(BootProto::kBootscanDelayMs);  // wait for some time to let boot in stabilize
 
