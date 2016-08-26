@@ -1,7 +1,7 @@
-#include "mbed.h"
-
 #ifndef ACTIVITY_LED_H_
 #define ACTIVITY_LED_H_
+
+#include "mbed.h"
 
 /**
  * A realtime polled (non-interrupt, requires periodic explicit update) blinky
@@ -24,8 +24,8 @@ public:
    * length past the reset edge) or queues another LED pulse.
    */
   void pulse(uint32_t pulseLengthMs) {
-    nextPulseLength = pulseLengthMs;
-    nextResetLength = pulseLengthMs;
+    nextPulseLength = pulseLengthMs * 1000;
+    nextResetLength = pulseLengthMs * 1000;
   }
 
   /**
@@ -43,7 +43,7 @@ public:
    * Call this periodically to update the LED status.
    */
   void update() {
-    uint32_t currentTime = timer.read_ms();
+    int32_t currentTime = timer.read_us();
 
     if (inPulse) {
       if (currentTime >= nextResetEdge) {
@@ -65,8 +65,6 @@ public:
       nextResetEdge = nextIdleEdge + nextResetLength;
       nextPulseLength = 0;
       inPulse = true;
-    } else {
-      led = idleValue;
     }
   }
 
@@ -76,8 +74,8 @@ private:
   bool idleValue;
 
   bool inPulse; // whether currently in a pulse
-  uint32_t nextIdleEdge;   // timer value to return the LED to the idle state
-  uint32_t nextResetEdge;  // timer value at end of full pulse cycle (active + idle), must be >= nextIdleEdge
+  int32_t nextIdleEdge;   // timer value to return the LED to the idle state
+  int32_t nextResetEdge;  // timer value at end of full pulse cycle (active + idle), must be >= nextIdleEdge
 
   uint32_t nextPulseLength; // after the current pulse, the active length of the next one, or 0 if none queued
   uint32_t nextResetLength; // after the current pulse, the idle length of the next one
