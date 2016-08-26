@@ -85,4 +85,7 @@ public:
   virtual bool async_write(void* start_addr, void* data, size_t length) = 0;
 };
 
+#include "isp_stm32f303k8.h"
+#include "isp_stm32l432kc.h"
+
 #endif

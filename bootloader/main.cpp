@@ -14,7 +14,7 @@
 #include "blproto.h"
 
 #include "ActivityLED.h"
-#include "isp_f303k8.h"
+#include "isp.h"
 
 RawSerial usb_uart(SERIAL_TX, SERIAL_RX);
 RawSerial ext_uart(D1, D0);
@@ -177,7 +177,7 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, MemoryP
 }
 
 int bootloaderMaster() {
-  F303K8ISP isp;
+  ISP isp;
   isp.isp_begin();
 
   I2C i2c(D4, D5);
@@ -334,7 +334,7 @@ int bootloaderSlaveInit() {
 
   i2c.address(address);
 
-  F303K8ISP isp;
+  ISP isp;
   isp.isp_begin();
 
   BufferedPacketReader<BootProto::kMaxPayloadLength> i2cPacket;

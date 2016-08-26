@@ -1,0 +1,51 @@
+Import('env')
+
+env = env.Clone()
+
+SConscript('mbed-scons/targets/SConscript-mbed-env-stm32l432kc', exports='env',
+           duplicate=0)
+
+env.Append(CCFLAGS = ['-w'])
+# Disable some debugging functionality to reduce flash usage
+env['CPPDEFINES'].remove('DEVICE_STDIO_MESSAGES=1')
+# For some reason, this doesn't respect DEVICE_STIO_MESSAGES anymore
+# so stub out error(...) to prevent inclusion of printf(...)
+env.Append(LINKFLAGS='-Wl,--wrap=error')
+
+mbed_lib = env.MbedLikeLibrary(
+    'mbed', 'mbed/hal/',
+    ['api/', 'common/', 'hal/', 'targets/cmsis/', 'targets/hal/'],
+    ignore_sources=[
+      'targets/hal/TARGET_STM/TARGET_STM32L4/i2c_api.c',
+    ],
+    additional_sources=[
+      'mbed-overrides/stm32l432kc-bootloader/i2c_api.c'
+    ])
+env.Prepend(LIBS = mbed_lib)
+
+env.Append(LINKFLAGS=[
+  '-Wl,--whole-archive',  # used to compile mbed HAL, which uses funky weak symbols
+  mbed_lib,
+  '-Wl,--no-whole-archive',
+  '--specs=nosys.specs',
+])
+
+env['MBED_LINKSCRIPT'] = File('mbed-overrides/stm32l432kc-bootloader/STM32L432XX.ld').srcnode()
+
+# Top-level build flow
+env = env.Clone()
+
+env['CCFLAGS'].remove('-w')
+env.Append(CCFLAGS = ['-Werror', '-Wall'])
+
+bootloader = env.Program(
+  target = '../bootloader-stm32l432kc',
+  source = Glob('bootloader/*.cpp'),
+)
+env.Depends(bootloader, 'mbed-overrides/stm32l432kc-bootloader/STM32L432XX.ld')
+
+binary = env.Objcopy(bootloader)
+env.Objdump(bootloader)
+env.SymbolsSize(bootloader)
+
+Return('binary')

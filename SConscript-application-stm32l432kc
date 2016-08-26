@@ -1,0 +1,46 @@
+Import('env')
+
+env = env.Clone()
+
+SConscript('mbed-scons/targets/SConscript-mbed-env-stm32l432kc', exports='env',
+           duplicate=0)
+
+env.Append(CCFLAGS = ['-w'])
+
+mbed_lib = env.MbedLikeLibrary(
+    'mbed', 'mbed/hal/',
+    ['api/', 'common/', 'hal/', 'targets/cmsis/', 'targets/hal/'],
+    ignore_sources=[
+      'targets/cmsis/TARGET_STM/TARGET_STM32L4/TARGET_NUCLEO_L432KC/cmsis_nvic.c',
+    ],
+    additional_sources=[
+      'mbed-overrides/stm32l432kc-application/cmsis_nvic.c'
+    ])
+env.Prepend(LIBS = mbed_lib)
+
+env.Append(LINKFLAGS=[
+  '-Wl,--whole-archive',  # used to compile mbed HAL, which uses funky weak symbols
+  mbed_lib,
+  '-Wl,--no-whole-archive',
+  '--specs=nosys.specs',
+])
+
+env['MBED_LINKSCRIPT'] = File('mbed-overrides/stm32l432kc-application/STM32L432XX.ld').srcnode()
+
+# Top-level build flow
+env = env.Clone()
+
+env['CCFLAGS'].remove('-w')
+env.Append(CCFLAGS = ['-Werror', '-Wall'])
+
+application = env.Program(
+  target = '../application-stm32l432kc',
+  source = Glob('application/*.cpp'),
+)
+env.Depends(application, 'mbed-overrides/stm32l432kc-application/STM32L432XX.ld')
+
+binary = env.Objcopy(application)
+env.Objdump(application)
+env.SymbolsSize(application)
+
+Return('binary')

@@ -1,9 +1,11 @@
-#include "isp.h"
-
 #ifndef ISP_F303K8_H_
 #define ISP_F303K8_H_
 
-class F303K8ISP : public ISPBase {
+#ifdef TARGET_NUCLEO_F303K8
+
+extern "C" void FLASH_PageErase(uint32_t PageAddress);
+
+class ISP : public ISPBase {
 private:
   const static size_t kFlashStartAddr = 0x8000000;
   const static size_t kFlashEndAddr = 0x800ffff;
@@ -11,7 +13,7 @@ private:
   const static size_t kWriteSize = 2;
 
 public:
-  F303K8ISP() : async_op(OP_NONE) {
+  ISP() : async_op(OP_NONE) {
   }
 
   bool isp_begin() {
@@ -72,9 +74,7 @@ public:
       }
 
       if (async_length_remaining > 0) {
-        SET_BIT(FLASH->CR, FLASH_CR_PER);
-        WRITE_REG(FLASH->AR, async_addr_current);
-        SET_BIT(FLASH->CR, FLASH_CR_STRT);
+        FLASH_PageErase(async_addr_current);
 
         async_addr_current += kEraseSize;
         async_length_remaining -= kEraseSize;
@@ -210,4 +210,5 @@ private:
   }
 };
 
+#endif
 #endif
