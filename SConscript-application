@@ -18,8 +18,9 @@ env.Append(LINKFLAGS=[
   mbed_lib,
   '-Wl,--no-whole-archive',
   '--specs=nosys.specs',
-  '-Tmbed-overrides/stm32f303k8-application/STM32F303X8.ld',
 ])
+
+env['MBED_LINKSCRIPT'] = File('mbed-overrides/stm32f303k8-application/STM32F303X8.ld').srcnode()
 
 # Top-level build flow
 env = env.Clone()

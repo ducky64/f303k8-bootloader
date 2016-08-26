@@ -4,26 +4,14 @@ import os
 
 SetOption('num_jobs', multiprocessing.cpu_count() + 1)
 
-env = Environment(ENV=os.environ, tools=['mingw'])  # this forces linux-style parameters, which gcc-arm expects
+env = Environment(ENV={'PATH' : os.environ['PATH']}, tools=['mingw'])  # this forces linux-style parameters, which gcc-arm expects
 Export('env')
 
 ###
 ### Imports
 ###
+SConscript('mbed-scons/SConscript-env-gcc-arm', duplicate=0)
 SConscript('mbed-scons/SConscript-mbed', duplicate=0)
-
-###
-### GCC-ARM environment variables
-###
-env['AR'] = 'arm-none-eabi-ar'
-env['AS'] = 'arm-none-eabi-as'
-env['CC'] = 'arm-none-eabi-gcc'
-env['CXX'] = 'arm-none-eabi-g++'
-env['LINK'] = 'arm-none-eabi-g++'                # predefined is 'arm-none-eabi-gcc'
-env['RANLIB'] = 'arm-none-eabi-ranlib'
-env['OBJCOPY'] = 'arm-none-eabi-objcopy'
-env['OBJDUMP'] = 'arm-none-eabi-objdump'
-env['PROGSUFFIX'] = '.elf'
 
 ###
 ### Platform-specific build targets for mbed libraries
