@@ -10,6 +10,7 @@ Export('env')
 ###
 ### Imports
 ###
+SConscript('mbed-scons/SConscript-env-platforms', duplicate=0)
 SConscript('mbed-scons/SConscript-env-gcc-arm', duplicate=0)
 SConscript('mbed-scons/SConscript-mbed', duplicate=0)
 
@@ -17,11 +18,10 @@ SConscript('mbed-scons/SConscript-mbed', duplicate=0)
 ### Platform-specific build targets for mbed libraries
 ###
 env.Append(CCFLAGS = '-Os')
+env['MBED_TARGETS_JSON_FILE'] = File('mbed/hal/targets.json').srcnode()
 
 SConscript('mbed-scons/targets/SConscript-mbed-env-stm32f303k8', exports='env',
            duplicate=0)
-
-# env.Append(CXXFLAGS = '-std=c++11')  # Live on the bleeding edge, override the mbed default
 
 ###
 ### Actual build targets here

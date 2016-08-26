@@ -1,7 +1,9 @@
 Import('env')
 
 env = env.Clone()
+
 env.Append(CCFLAGS = ['-w'])
+
 mbed_lib = env.MbedLikeLibrary(
     'mbed', 'mbed/hal/',
     ['api/', 'common/', 'hal/', 'targets/cmsis/', 'targets/hal/'],

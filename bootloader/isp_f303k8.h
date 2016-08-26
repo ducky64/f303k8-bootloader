@@ -72,7 +72,9 @@ public:
       }
 
       if (async_length_remaining > 0) {
-        FLASH_PageErase(async_addr_current);
+        SET_BIT(FLASH->CR, FLASH_CR_PER);
+        WRITE_REG(FLASH->AR, async_addr_current);
+        SET_BIT(FLASH->CR, FLASH_CR_STRT);
 
         async_addr_current += kEraseSize;
         async_length_remaining -= kEraseSize;

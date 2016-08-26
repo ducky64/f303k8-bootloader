@@ -1,7 +1,14 @@
 Import('env')
 
 env = env.Clone()
-env.Append(CCFLAGS = ['-w', '-include', 'mbed-overrides/stm32f303k8-bootloader/device.h'])
+
+env.Append(CCFLAGS = ['-w'])
+# Disable some debugging functionality to reduce flash usage
+env['CPPDEFINES'].remove('DEVICE_STDIO_MESSAGES=1')
+# For some reason, this doesn't respect DEVICE_STIO_MESSAGES anymore
+# so stub out error(...) to prevent inclusion of printf(...)
+env.Append(LINKFLAGS='-Wl,--wrap=error')
+
 mbed_lib = env.MbedLikeLibrary(
     'mbed', 'mbed/hal/',
     ['api/', 'common/', 'hal/', 'targets/cmsis/', 'targets/hal/'],
