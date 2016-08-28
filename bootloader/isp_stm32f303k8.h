@@ -5,6 +5,18 @@
 
 extern "C" void FLASH_PageErase(uint32_t PageAddress);
 
+// for some reason, this isn't exposed in stm32f3xx_hal_flash.h
+static void FLASH_Program_HalfWord(uint32_t Address, uint16_t Data)
+{
+  /* Clear pending flags (if any) */
+  __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_WRPERR | FLASH_FLAG_PGERR);
+
+  /* Proceed to program the new data */
+  SET_BIT(FLASH->CR, FLASH_CR_PG);
+
+  *(__IO uint16_t*)Address = Data;
+}
+
 class ISP : public ISPBase {
 private:
   const static size_t kFlashStartAddr = 0x8000000;
@@ -196,18 +208,6 @@ private:
   uint8_t* async_data_ptr;
   size_t async_length_remaining;
   ISPStatus async_status;
-
-  // for some reason, this isn't exposed in stm32f3xx_hal_flash.h
-  static void FLASH_Program_HalfWord(uint32_t Address, uint16_t Data)
-  {
-    /* Clear pending flags (if any) */
-    __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_WRPERR | FLASH_FLAG_PGERR);
-
-    /* Proceed to program the new data */
-    SET_BIT(FLASH->CR, FLASH_CR_PG);
-
-    *(__IO uint16_t*)Address = Data;
-  }
 };
 
 #endif
