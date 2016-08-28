@@ -22,9 +22,9 @@ parser.add_argument('serial', type=str,
                     help='serial port to use, like COM1 (Windows) or /dev/ttyACM0 (Linux)')
 parser.add_argument('--baud', type=int, default=115200,
                     help='serial baud rate')
-parser.add_argument('--address', type=int, default=0x8000000 + 32*1024,
+parser.add_argument('--address', type=int, default=0x8000000 + 16*1024,
                     help='starting address')
-parser.add_argument('--memsize', type=int, default=(256-32)*1024,
+parser.add_argument('--memsize', type=int, default=(256-16)*1024,
                     help='memory size')
 parser.add_argument('--devices', type=int, nargs='+',
                     help='device number, 0 is master, slaves start at 1 (optional, defaults to 0...len(bin_files)-1)')
@@ -112,7 +112,7 @@ class BootloaderComms(object):
     logging.info("Erase %i bytes from device %i ...", erase_size, device)
     start = time.time()
     self.erase(device, address, erase_size)
-    logging.info("  done (%s s)", time.time() - start)
+    logging.info("  done (%.03f s)", time.time() - start)
     curr_address = address
 
     curr_file_loc = 0
