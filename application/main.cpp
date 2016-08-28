@@ -7,8 +7,8 @@
 
 #include "mbed.h"
 
-PwmOut led0(D11);
-PwmOut led1(D12);
+PwmOut led0(D9);
+PwmOut led1(D10);
 
 DigitalOut mainLed(LED1);
 
