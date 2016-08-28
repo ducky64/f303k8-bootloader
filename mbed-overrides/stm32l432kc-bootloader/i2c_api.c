@@ -40,8 +40,8 @@
 /* Timeout values for flags and events waiting loops. These timeouts are
    not based on accurate values, they just guarantee that the application will
    not remain stuck if the I2C communication is corrupted. */
-#define FLAG_TIMEOUT ((int)0x4000)
-#define LONG_TIMEOUT ((int)0x8000)
+#define FLAG_TIMEOUT ((int)0x100000)
+#define LONG_TIMEOUT ((int)0x200000)
 
 I2C_HandleTypeDef I2cHandle;
 
