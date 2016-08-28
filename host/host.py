@@ -22,9 +22,9 @@ parser.add_argument('serial', type=str,
                     help='serial port to use, like COM1 (Windows) or /dev/ttyACM0 (Linux)')
 parser.add_argument('--baud', type=int, default=115200,
                     help='serial baud rate')
-parser.add_argument('--address', type=int, default=0x8000000 + 16*1024,
+parser.add_argument('--address', type=int, default=0x8000000 + 32*1024,
                     help='starting address')
-parser.add_argument('--memsize', type=int, default=48*1024,
+parser.add_argument('--memsize', type=int, default=(256-32)*1024,
                     help='memory size')
 parser.add_argument('--devices', type=int, nargs='+',
                     help='device number, 0 is master, slaves start at 1 (optional, defaults to 0...len(bin_files)-1)')
@@ -59,11 +59,11 @@ class BootloaderComms(object):
     self.serial.write(b'\x00')
     self.retries = retries
 
-  def command(self, packet, reply_expected=True):
+  def command(self, packet, debug_text="", reply_expected=True):
     retry = 0
     while retry <= self.retries:
       if retry > 0:
-        logging.error("Retrying command (try %i of max %i)", retry, self.retries)
+        logging.error("Retrying command (try %i of max %i): %s", retry, self.retries, debug_text)
       self.serial.write(cobs_encode(packet.get_bytes()) + b'\x00')
       if reply_expected:
         line = ser.readline().strip()
@@ -75,7 +75,7 @@ class BootloaderComms(object):
           retry += 1
       else:
         return
-    raise BootloaderResponseError("Hit max retries for command")
+    raise BootloaderResponseError("Hit max retries for command: %s" % (debug_text))
 
   def erase(self, device, address, length):
     packet = PacketBuilder()
@@ -83,7 +83,7 @@ class BootloaderComms(object):
     packet.put_uint8(device)
     packet.put_uint32(address)
     packet.put_uint32(length)
-    self.command(packet)
+    self.command(packet, "Erase %i bytes @ %08x" % (length, address))
 
   def write(self, device, address, data):
     packet = PacketBuilder()
@@ -92,19 +92,19 @@ class BootloaderComms(object):
     packet.put_uint32(address)
     packet.put_uint32(binascii.crc32(data) & 0xffffffff)
     packet.put_bytes(data, len(data))
-    self.command(packet)
+    self.command(packet, "Program %i bytes @ %08x" % (len(data), address))
 
   def run_app(self, device, address):
     packet = PacketBuilder()
     packet.put_uint8(ord('J'))
     packet.put_uint8(device)
     packet.put_uint32(address)
-    self.command(packet, reply_expected=False)
+    self.command(packet, "Run app @ %08x" % address, reply_expected=False)
 
   def program(self, device, memsize, address, program_bin_filename):
     time.sleep(0.1) # wait for some time to initialize the serial object, otherwise the initial flush doesn't work
     bytes_read = ser.read(ser.inWaiting())
-    logging.debug("Serial: flushed %i bytes", len(bytes_read))
+    logging.info("Serial: flushed %i bytes: %s", len(bytes_read), bytes_read)
 
     program_size = os.path.getsize(program_bin_filename)
     erase_size = int(math.ceil(program_size / float(ERASE_SIZE)) * ERASE_SIZE)
