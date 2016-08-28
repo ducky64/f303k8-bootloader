@@ -210,6 +210,12 @@ int bootloaderMaster() {
     i2c.write(thisDeviceAddress, (char*)i2cData, 1);
 
     numDevices += 1;
+
+    // TODO: account for more than 10 devices
+    usb_uart.putc(numDevices + '1');
+    ext_uart.putc(numDevices + '1');
+    usb_uart.puts(" devices in chain\r\n");
+    ext_uart.puts(" devices in chain\r\n");
   }
 
   if (!masterRunAppPin) {
@@ -249,9 +255,24 @@ int bootloaderMaster() {
         if (status == BootProto::kRespDone) {
           usb_uart.puts("D\n");
           ext_uart.puts("D\n");
+        } else if (status == BootProto::kRespInvalidFormat) {
+          usb_uart.puts("I\n");
+          ext_uart.puts("I\n");
+        } else if (status == BootProto::kRespInvalidArgs) {
+          usb_uart.puts("A\n");
+          ext_uart.puts("A\n");
+        } else if (status == BootProto::kRespInvalidChecksum) {
+          usb_uart.puts("C\n");
+          ext_uart.puts("C\n");
+        } else if (status == BootProto::kRespFlashError) {
+          usb_uart.puts("F\n");
+          ext_uart.puts("F\n");
+        } else if (status == BootProto::kRespUnknownError) {
+          usb_uart.puts("U\n");
+          ext_uart.puts("U\n");
         } else {
-          usb_uart.puts("N\n");
-          ext_uart.puts("N\n");
+          usb_uart.puts("?\n");
+          ext_uart.puts("?\n");
         }
         packet.reset();
         decoder.set_buffer(&packet);
