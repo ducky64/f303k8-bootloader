@@ -31,6 +31,18 @@ public:
   virtual uint32_t get_device_serial() = 0;
 
   /**
+   * Returns the address of the first byte in flash.
+   * TODO: define meaning for multibank / non-continuous flash address.
+   */
+  virtual size_t get_flash_addr_start() = 0;
+
+  /**
+   * Returns the address of the last byte in flash.
+   * TODO: define meaning for multibank / non-continuous flash address.
+   */
+  virtual size_t get_flash_addr_end() = 0;
+
+  /**
    * Returns the size, in bytes, of a erase sector. Will return a power of two.
    * erase() will be guaranteed to complete when the size is a multiple of this.
    */

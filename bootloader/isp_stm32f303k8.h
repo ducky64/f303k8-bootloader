@@ -44,6 +44,14 @@ public:
     return 0;
   }
 
+  size_t get_flash_addr_start() {
+    return kFlashStartAddr;
+  }
+
+  size_t get_flash_addr_end() {
+    return kFlashEndAddr;
+  }
+
   size_t get_erase_size() {
     return kEraseSize;
   }

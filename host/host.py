@@ -22,10 +22,6 @@ parser.add_argument('serial', type=str,
                     help='serial port to use, like COM1 (Windows) or /dev/ttyACM0 (Linux)')
 parser.add_argument('--baud', type=int, default=115200,
                     help='serial baud rate')
-parser.add_argument('--address', type=int, default=0x8000000 + 16*1024,
-                    help='starting address')
-parser.add_argument('--memsize', type=int, default=(256-16)*1024,
-                    help='memory size')
 parser.add_argument('--devices', type=int, nargs='+',
                     help='device number, 0 is master, slaves start at 1 (optional, defaults to 0...len(bin_files)-1)')
 
@@ -83,7 +79,7 @@ class BootloaderComms(object):
     packet.put_uint8(device)
     packet.put_uint32(address)
     packet.put_uint32(length)
-    self.command(packet, "Erase %i bytes @ %08x" % (length, address))
+    self.command(packet, "Erase %i bytes @ +%08x" % (length, address))
 
   def write(self, device, address, data):
     packet = PacketBuilder()
@@ -92,16 +88,16 @@ class BootloaderComms(object):
     packet.put_uint32(address)
     packet.put_uint32(binascii.crc32(data) & 0xffffffff)
     packet.put_bytes(data, len(data))
-    self.command(packet, "Program %i bytes @ %08x" % (len(data), address))
+    self.command(packet, "Program %i bytes @ +%08x" % (len(data), address))
 
   def run_app(self, device, address):
     packet = PacketBuilder()
     packet.put_uint8(ord('J'))
     packet.put_uint8(device)
     packet.put_uint32(address)
-    self.command(packet, "Run app @ %08x" % address, reply_expected=False)
+    self.command(packet, "Run app @ +%08x" % address, reply_expected=False)
 
-  def program(self, device, memsize, address, program_bin_filename):
+  def program(self, device, program_bin_filename):
     time.sleep(0.1) # wait for some time to initialize the serial object, otherwise the initial flush doesn't work
     bytes_read = ser.read(ser.inWaiting())
     logging.info("Serial: flushed %i bytes: %s", len(bytes_read), bytes_read)
@@ -111,11 +107,10 @@ class BootloaderComms(object):
 
     logging.info("Erase %i bytes from device %i ...", erase_size, device)
     start = time.time()
-    self.erase(device, address, erase_size)
+    self.erase(device, 0, erase_size)
     logging.info("  done (%.03f s)", time.time() - start)
-    curr_address = address
-
-    curr_file_loc = 0
+    
+    curr_address = 0
     program_bin = open(program_bin_filename, 'rb')
     logging.info("Write %i bytes to device %i", program_size, device)
     sys.stdout.write("...")
@@ -125,8 +120,7 @@ class BootloaderComms(object):
       if chunk:
         self.write(device, curr_address, chunk)
         curr_address += len(chunk)
-        curr_file_loc += len(chunk)
-        sys.stdout.write('\r' + pbar(curr_file_loc, program_size))
+        sys.stdout.write('\r' + pbar(curr_address, program_size))
         sys.stdout.flush()
       else:
         break
@@ -147,15 +141,15 @@ assert len(devices) == len(args.bin_files)
 for device, bin_filename in zip(devices, args.bin_files):
   logging.info("Programming '%s' onto device %i", bin_filename, device)
 
-  bootloader.program(device, args.memsize, args.address, bin_filename)
+  bootloader.program(device, bin_filename)
 
 for device in devices:
   if device != 0:
     logging.info("Start app on device %i", device)
-    bootloader.run_app(device, args.address)
+    bootloader.run_app(device, 0)
 
 if 0 in devices:
     logging.info("Start app on device 0")
-    bootloader.run_app(0, args.address)
+    bootloader.run_app(0, 0)
 
 ser.close()

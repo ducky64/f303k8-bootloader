@@ -125,7 +125,7 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, MemoryP
       uint8_t* data = packet.read_buf(data_length);
       uint32_t computed_crc = CRC32::compute_crc(data, data_length);
       if (computed_crc == crc) {
-        return blstatus_from_ispstatus(isp.write((void*)addr, data, data_length));
+        return blstatus_from_ispstatus(isp.write((void*)((size_t)kAppBeginPtr+(size_t)addr), data, data_length));
       } else {
         return BootProto::kRespInvalidChecksum;
       }
@@ -150,7 +150,7 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, MemoryP
 
       return get_slave_status(i2c, device);
     } else {
-      return blstatus_from_ispstatus(isp.erase((void*)addr, length));
+      return blstatus_from_ispstatus(isp.erase((void*)((size_t)kAppBeginPtr+(size_t)addr), length));
     }
   } else if (opcode == 'J') {
     uint8_t device = packet.read<uint8_t>();
@@ -167,7 +167,7 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, MemoryP
           (char*)i2cPacket.getBuffer(), i2cPacket.getLength());
     } else {
       isp.isp_end();
-      runApp((void*)addr);
+      runApp((void*)((size_t)kAppBeginPtr+(size_t)addr));
     }
 
     return BootProto::kRespDone;
@@ -403,7 +403,7 @@ int bootloaderSlaveInit() {
           uint32_t startAddr = i2cPacket.read<uint32_t>();
           uint32_t len = i2cPacket.read<uint32_t>();
 
-          isp.async_erase((void*)startAddr, len);
+          isp.async_erase((void*)((size_t)kAppBeginPtr+(size_t)startAddr), len);
           lastStatus = BootProto::kRespDone;
         } else {
           lastStatus = BootProto::kRespInvalidFormat;
@@ -419,7 +419,7 @@ int bootloaderSlaveInit() {
             uint8_t* data = i2cPacket.read_buf(len);
             uint32_t computed_crc = CRC32::compute_crc(data, len);
             if (computed_crc == crc) {
-              isp.async_write((void*)startAddr, data, len);
+              isp.async_write((void*)((size_t)kAppBeginPtr+(size_t)startAddr), data, len);
               lastStatus = BootProto::kRespDone;
             } else {
               lastStatus = BootProto::kRespInvalidChecksum;
@@ -434,7 +434,7 @@ int bootloaderSlaveInit() {
         if (!i2c.read((char*)i2cPacket.ptrPutBytes(4), 4)) {
           uint32_t addr = i2cPacket.read<uint32_t>();
           isp.isp_end();
-          runApp((void*)addr);
+          runApp((void*)((size_t)kAppBeginPtr+(size_t)addr));
         }
       } else {
         // Drop everything else
