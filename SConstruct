@@ -21,6 +21,10 @@ if ARGUMENTS.get('VERBOSE') != '1':
     'CXXCOMSTR': 'CXX',
     'LINKCOMSTR': 'LD',
     'RANLIBCOMSTR': 'RANLIB',
+    'OBJCOPYCOMSTR': 'BIN',
+    'OBJDUMPCOMSTR': 'DUMP',
+    'SYMBOLSCOMSTR': 'SYM',
+    'SYMBOLSIZESCOMSTR': 'SYM',
   })
 
 ###
