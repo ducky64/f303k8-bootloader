@@ -7,6 +7,15 @@ SetOption('num_jobs', multiprocessing.cpu_count() + 1)
 env = Environment(ENV={'PATH' : os.environ['PATH']}, tools=['mingw'])  # this forces linux-style parameters, which gcc-arm expects
 Export('env')
 
+##
+## Go fast!
+##
+env.Decider('MD5-timestamp')
+
+##
+## Debugging output optimization
+##
+
 def simplify_output(env, mappings):
   pad_len = max([len(val) for val in mappings.values()]) + 2
   for key, val in mappings.items():

@@ -2,6 +2,8 @@ Import('env')
 
 env = env.Clone()
 
+env['MBED_LIB_LINKSCRIPTS_ROOT'] = Dir('mbed/hal').srcnode()
+
 SConscript('mbed-scons/targets/SConscript-mbed-env-stm32l432kc', exports='env',
            duplicate=0)
 
@@ -9,13 +11,8 @@ env.Append(CCFLAGS = ['-w'])
 
 mbed_lib = env.MbedLikeLibrary(
     'mbed', 'mbed/hal/',
-    ['api/', 'common/', 'hal/', 'targets/cmsis/', 'targets/hal/'],
-    ignore_sources=[
-      'targets/cmsis/TARGET_STM/TARGET_STM32L4/TARGET_NUCLEO_L432KC/cmsis_nvic.c',
-    ],
-    additional_sources=[
-      'mbed-overrides/stm32l432kc-application/cmsis_nvic.c'
-    ])
+    ['api/', 'common/', 'hal/', 'targets/cmsis/', 'targets/hal/']
+)
 env.Prepend(LIBS = mbed_lib)
 
 env.Append(LINKFLAGS=[
@@ -24,8 +21,6 @@ env.Append(LINKFLAGS=[
   '-Wl,--no-whole-archive',
   '--specs=nosys.specs',
 ])
-
-env['MBED_LINKSCRIPT'] = File('mbed-overrides/stm32l432kc-application/STM32L432XX.ld').srcnode()
 
 # Top-level build flow
 env = env.Clone()
@@ -37,7 +32,7 @@ application = env.Program(
   target = '../application-stm32l432kc',
   source = Glob('application/*.cpp'),
 )
-env.Depends(application, 'mbed-overrides/stm32l432kc-application/STM32L432XX.ld')
+env.Depends(application, env['MBED_LINKSCRIPT'])
 
 binary = env.Objcopy(application)
 env.Objdump(application)

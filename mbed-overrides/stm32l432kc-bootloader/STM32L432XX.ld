@@ -1,7 +1,7 @@
 /* Linker script to configure memory regions. */
 MEMORY
 {
-  FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 32K
+  FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 256K
   SRAM2 (rwx)  : ORIGIN = 0x10000188, LENGTH = 16k - 0x188
   SRAM1 (rwx)  : ORIGIN = 0x20000000, LENGTH = 48k
 }
@@ -35,10 +35,22 @@ MEMORY
  */
 ENTRY(Reset_Handler)
 
+_BootloaderData = 2K;
+_BootloaderSize = 20K;
+
 SECTIONS
 {
     .text :
     {
+        .boot_vector_start = .;
+        KEEP(*(.boot_vector))
+        .boot_vector_end = .;
+        FILL(0xDEADBEEF);
+        . = ORIGIN(FLASH) + (256K - _BootloaderSize - _BootloaderData);
+        .bootloader_data = .;
+        FILL(0xFF);
+        . = ORIGIN(FLASH) + (256K - _BootloaderSize);
+        .bootloader_isr_vector = .;
         KEEP(*(.isr_vector))
         *(.text*)
         KEEP(*(.init))
@@ -155,4 +167,18 @@ SECTIONS
     /* Make bootloader stuff consistent */
     _FlashStart = ORIGIN(FLASH);
     _FlashEnd = ORIGIN(FLASH) + LENGTH(FLASH);
+    
+    _AppStart = ORIGIN(FLASH);
+    _AppEnd = .bootloader_data;
+    
+    _BootloaderDataStart = .bootloader_data;
+    _BootloaderDataEnd = .bootloader_isr_vector;
+    
+    _BootloaderStart = .bootloader_isr_vector;
+    _BootloaderEnd = __etext;
+    
+    _BootVector = .boot_vector_start;
+    _BootVectorSize = .boot_vector_end - .boot_vector_start;
+    
+    _BootloaderVector = .bootloader_isr_vector;
 }

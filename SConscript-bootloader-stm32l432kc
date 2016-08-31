@@ -17,9 +17,12 @@ mbed_lib = env.MbedLikeLibrary(
     ['api/', 'common/', 'hal/', 'targets/cmsis/', 'targets/hal/'],
     ignore_sources=[
       'targets/hal/TARGET_STM/TARGET_STM32L4/i2c_api.c',
+      'targets/cmsis/TARGET_STM/TARGET_STM32L4/TARGET_NUCLEO_L432KC/cmsis_nvic.c',
     ],
     additional_sources=[
-      'mbed-overrides/stm32l432kc-bootloader/i2c_api.c'
+      'mbed-overrides/stm32l432kc-bootloader/cmsis_nvic.c',
+      'mbed-overrides/stm32l432kc-bootloader/i2c_api.c',
+      'mbed-overrides/stm32l432kc-bootloader/boot_vector.S',
     ])
 env.Prepend(LIBS = mbed_lib)
 
@@ -42,7 +45,7 @@ bootloader = env.Program(
   target = '../bootloader-stm32l432kc',
   source = Glob('bootloader/*.cpp'),
 )
-env.Depends(bootloader, 'mbed-overrides/stm32l432kc-bootloader/STM32L432XX.ld')
+env.Depends(bootloader, env['MBED_LINKSCRIPT'])
 
 binary = env.Objcopy(bootloader)
 env.Objdump(bootloader)
