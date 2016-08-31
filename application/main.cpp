@@ -12,7 +12,7 @@ PwmOut led1(D10);
 
 DigitalOut mainLed(LED1);
 
-DigitalIn bootInPin(D3, PullDown);
+DigitalIn bootInPin(D3, PullUp);
 
 int main() {
   RawSerial uart(SERIAL_TX, SERIAL_RX);

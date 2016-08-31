@@ -16,8 +16,8 @@ mbed_lib = env.MbedLikeLibrary(
     'mbed', 'mbed/hal/',
     ['api/', 'common/', 'hal/', 'targets/cmsis/', 'targets/hal/'],
     ignore_sources=[
-      'targets/hal/TARGET_STM/TARGET_STM32L4/i2c_api.c',
       'targets/cmsis/TARGET_STM/TARGET_STM32L4/TARGET_NUCLEO_L432KC/cmsis_nvic.c',
+      'targets/hal/TARGET_STM/TARGET_STM32L4/i2c_api.c',
     ],
     additional_sources=[
       'mbed-overrides/stm32l432kc-bootloader/cmsis_nvic.c',

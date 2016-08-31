@@ -36,7 +36,7 @@ MEMORY
 ENTRY(Reset_Handler)
 
 _BootloaderData = 2K;
-_BootloaderSize = 20K;
+_BootloaderSize = 200K;
 
 SECTIONS
 {
@@ -46,10 +46,10 @@ SECTIONS
         KEEP(*(.boot_vector))
         .boot_vector_end = .;
         FILL(0xDEADBEEF);
-        . = ORIGIN(FLASH) + (256K - _BootloaderSize - _BootloaderData);
+        . = ORIGIN(FLASH) + LENGTH(FLASH) - _BootloaderSize - _BootloaderData;
         .bootloader_data = .;
         FILL(0xFF);
-        . = ORIGIN(FLASH) + (256K - _BootloaderSize);
+        . = ORIGIN(FLASH) + LENGTH(FLASH) - _BootloaderSize;
         .bootloader_isr_vector = .;
         KEEP(*(.isr_vector))
         *(.text*)
@@ -177,8 +177,8 @@ SECTIONS
     _BootloaderStart = .bootloader_isr_vector;
     _BootloaderEnd = __etext;
     
-    _BootVector = .boot_vector_start;
-    _BootVectorSize = .boot_vector_end - .boot_vector_start;
+    _BootVectorBegin = .boot_vector_start;
+    _BootVectorEnd = .boot_vector_end;
     
     _BootloaderVector = .bootloader_isr_vector;
 }

@@ -33,21 +33,26 @@ const uint32_t kHeartbeatPeriodMs = 1000;
 const uint32_t kInitHeartbeatPeriodMs = 500;
 const uint32_t kHeartbeatPulseTimeMs = kActivityPulseTimeMs;
 
-extern char _FlashStart, _FlashEnd;
-void* const kBootloaderBeginPtr = &_FlashStart;
-void* const kAppBeginPtr = &_FlashEnd;
+extern char _AppStart, _AppEnd, _BootloaderDataStart, _BootloaderDataEnd, _BootVectorBegin, _BootVectorEnd, _BootloaderVector;
+uint8_t* const kAppBeginPtr = (uint8_t*)&_AppStart;
+uint8_t* const kAppEndPtr = (uint8_t*)&_AppEnd;
+uint8_t* const kBootloaderDataBeginPtr = (uint8_t*)&_BootloaderDataStart;
+uint8_t* const kBootloaderDataEndPtr = (uint8_t*)&_BootloaderDataEnd;
+uint8_t* const kBootVectorPtr = (uint8_t*)&_BootVectorBegin;
+const size_t kBootVectorSize = (uint8_t*)&_BootVectorEnd - (uint8_t*)&_BootVectorBegin;
+uint8_t* const kBootloaderVectorPtr = (uint8_t*)&_BootloaderVector;
 
 /**
  * Runs an application at the specified address. Should not return under normal
  * circumstances.
  */
-void runApp(void* addr) {
+void runApp(void* app_ptrs, void* isr_vectors) {
   // Use statics since the stack pointer gets reset without the compiler knowing.
   static uint32_t stack_ptr = 0;
   static void (*target)(void) = 0;
 
-  stack_ptr = (*(uint32_t*)((uint8_t*)addr + 0));
-  target = (void (*)(void))(*(uint32_t*)((uint8_t*)addr + 4));
+  stack_ptr = (*(uint32_t*)((uint8_t*)app_ptrs + 0));
+  target = (void (*)(void))(*(uint32_t*)((uint8_t*)app_ptrs + 4));
 
   // Just to be extra safe
   for (uint8_t i=0; i<NVIC_NUM_VECTORS; i++) {
@@ -55,7 +60,7 @@ void runApp(void* addr) {
   }
 
   // Reset the interrupt table so the application can re-load it
-  SCB->VTOR = (uint32_t)addr;
+  SCB->VTOR = (uint32_t)isr_vectors;
 
   __set_MSP(stack_ptr);
   __set_PSP(stack_ptr);
@@ -66,6 +71,10 @@ void runApp(void* addr) {
   // For some reason, this increments the stack pointer past the top of memory,
   // causing a hardfault when it tries to access those locations.
   // target();
+}
+
+void runApp(void* app_ptr) {
+  runApp(app_ptr, app_ptr);
 }
 
 BootProto::RespStatus blstatus_from_ispstatus(ISPBase::ISPStatus status) {
@@ -122,13 +131,38 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, MemoryP
 
       return get_slave_status(i2c, device);
     } else {
+      uint8_t* write_start_ptr = kAppBeginPtr + addr;
+      uint8_t* write_end_ptr = write_start_ptr + data_length;
+      if (write_start_ptr < kAppBeginPtr
+          || write_end_ptr > kAppEndPtr) {
+        return BootProto::kRespInvalidArgs;
+      }
+
       uint8_t* data = packet.read_buf(data_length);
       uint32_t computed_crc = CRC32::compute_crc(data, data_length);
-      if (computed_crc == crc) {
-        return blstatus_from_ispstatus(isp.write((void*)((size_t)kAppBeginPtr+(size_t)addr), data, data_length));
-      } else {
+      if (computed_crc != crc) {
         return BootProto::kRespInvalidChecksum;
       }
+
+      ISPBase::ISPStatus status;
+      if (write_start_ptr < kBootVectorPtr + kBootVectorSize
+          && write_end_ptr > kBootVectorPtr) {
+        // TODO: allow writes where the write start isn't the boot vector
+        if (write_start_ptr != kBootVectorPtr) {
+          return BootProto::kRespInvalidArgs;
+        }
+        // Redirect requests to overwrite the boot vector to the bootloader data segment
+        status = isp.write(kBootloaderDataBeginPtr, data, kBootVectorSize);
+        if (status != ISPBase::kISPOk) {
+          return blstatus_from_ispstatus(status);
+        }
+        status = isp.write(write_start_ptr + kBootVectorSize, data + kBootVectorSize, data_length - kBootVectorSize);
+
+      } else {
+        status = isp.write(write_start_ptr, data, data_length);
+      }
+
+      return blstatus_from_ispstatus(status);
 
     }
   } else if (opcode == 'E') {
@@ -150,7 +184,40 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, MemoryP
 
       return get_slave_status(i2c, device);
     } else {
-      return blstatus_from_ispstatus(isp.erase((void*)((size_t)kAppBeginPtr+(size_t)addr), length));
+      uint8_t* erase_start_ptr = kAppBeginPtr+addr;
+      uint8_t* erase_end_ptr = erase_start_ptr + length;
+      if (erase_start_ptr < kAppBeginPtr
+          || erase_end_ptr > kAppEndPtr) {
+        return BootProto::kRespInvalidArgs;
+      }
+
+      ISPBase::ISPStatus status;
+      if (erase_start_ptr < kBootVectorPtr + kBootVectorSize
+          && erase_end_ptr > kBootVectorPtr) {
+        // TODO: allow erases where the write start isn't the boot vector
+        if (erase_start_ptr != kBootVectorPtr) {
+          return BootProto::kRespInvalidArgs;
+        }
+        // Redirect requests to overwrite the boot vector to the bootloader data segment
+        status = isp.erase(kBootloaderDataBeginPtr, kBootloaderDataEndPtr - kBootloaderDataBeginPtr);
+        if (status != ISPBase::kISPOk) {
+          return blstatus_from_ispstatus(status);
+        }
+        // Erase the boot vector page and immediately reprogram it
+        status = isp.erase(kBootVectorPtr, isp.get_erase_size());
+        if (status != ISPBase::kISPOk) {
+          return blstatus_from_ispstatus(status);
+        }
+        status = isp.write(kBootVectorPtr, kBootloaderVectorPtr, kBootVectorSize);
+        if (status != ISPBase::kISPOk) {
+          return blstatus_from_ispstatus(status);
+        }
+        status = isp.erase(erase_start_ptr + isp.get_erase_size(), length - isp.get_erase_size());
+      } else {
+        status = isp.erase(erase_start_ptr, length);
+      }
+
+      return blstatus_from_ispstatus(status);
     }
   } else if (opcode == 'J') {
     uint8_t device = packet.read<uint8_t>();
@@ -167,7 +234,17 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, MemoryP
           (char*)i2cPacket.getBuffer(), i2cPacket.getLength());
     } else {
       isp.isp_end();
-      runApp((void*)((size_t)kAppBeginPtr+(size_t)addr));
+      uint8_t* app_ptr = kAppBeginPtr + addr;
+      if (app_ptr < kBootVectorPtr + kBootVectorSize
+          && app_ptr >= kBootVectorPtr) {
+        // TODO: allow runs where the app ptr isn't the boot vector
+        if (app_ptr != kBootVectorPtr) {
+          return BootProto::kRespInvalidArgs;
+        }
+        runApp(kBootloaderDataBeginPtr, app_ptr);
+      } else {
+        runApp(app_ptr, app_ptr);
+      }
     }
 
     return BootProto::kRespDone;
@@ -232,7 +309,7 @@ int bootloaderMaster() {
       i2c.write(BootProto::GetDeviceAddr(i),
           (char*)i2cPacket.getBuffer(), i2cPacket.getLength());
     }
-    runApp((void*)kAppBeginPtr);
+    runApp(kBootloaderDataBeginPtr, kAppBeginPtr);
   }
 
   statusLED.setIdlePolarity(true);

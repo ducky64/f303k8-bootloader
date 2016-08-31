@@ -32,8 +32,8 @@
 
 #define NVIC_RAM_VECTOR_ADDRESS   (0x20000000)  // Vectors positioned at start of RAM
 
-extern char _FlashStart;
-const uint32_t NVIC_FLASH_VECTOR_ADDRESS = (uint32_t)((void* const)&_FlashStart);
+extern char _BootloaderVector;
+const uint32_t NVIC_FLASH_VECTOR_ADDRESS = (uint32_t)((void* const)&_BootloaderVector);
 // Because SCB->VTOR is set to the base of flash in SystemInit, also need to consider
 // that case, and have it load from offseted flash.
 const uint32_t NVIC_DEFAULT_ADDRESS = 0x08000000;

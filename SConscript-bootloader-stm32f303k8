@@ -16,10 +16,13 @@ mbed_lib = env.MbedLikeLibrary(
     'mbed', 'mbed/hal/',
     ['api/', 'common/', 'hal/', 'targets/cmsis/', 'targets/hal/'],
     ignore_sources=[
+      'targets/cmsis/TARGET_STM/TARGET_STM32F3/TARGET_NUCLEO_F303K8/cmsis_nvic.c',
       'targets/hal/TARGET_STM/TARGET_STM32F3/i2c_api.c',
     ],
     additional_sources=[
-      'mbed-overrides/stm32f303k8-bootloader/i2c_api.c'
+    'mbed-overrides/stm32f303k8-bootloader/cmsis_nvic.c',
+      'mbed-overrides/stm32f303k8-bootloader/i2c_api.c',
+      'mbed-overrides/stm32f303k8-bootloader/boot_vector.S',
     ])
 env.Prepend(LIBS = mbed_lib)
 
@@ -42,7 +45,7 @@ bootloader = env.Program(
   target = '../bootloader-stm32f303k8',
   source = Glob('bootloader/*.cpp'),
 )
-env.Depends(bootloader, 'mbed-overrides/stm32f303k8-bootloader/STM32F303X8.ld')
+env.Depends(bootloader, env['MBED_LINKSCRIPT'])
 
 binary = env.Objcopy(bootloader)
 env.Objdump(bootloader)
