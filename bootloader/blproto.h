@@ -2,7 +2,7 @@
 #define BLPROTO_H_
 
 namespace BootProto {
-  const uint32_t kBootscanDelayMs = 50;  // delay, in ms, before doing the initial BOOT_IN check to determine master/slave
+  const uint32_t kBootscanDelayMs = 100;  // delay, in ms, before doing the initial BOOT_IN check to determine master/slave
   const uint32_t kBootToAddrDelayMs = 10;
 
   const uint8_t kAddressGlobal = 0x42 << 1;

@@ -20,7 +20,7 @@ RawSerial usb_uart(SERIAL_TX, SERIAL_RX);
 RawSerial ext_uart(D1, D0);
 
 DigitalIn masterRunAppPin(D2, PullUp);
-DigitalIn bootInPin(D3, PullDown);
+DigitalIn bootInPin(D3, PullUp);
 DigitalOut bootOutPin(D6);
 
 ActivityLED statusLED(LED1);
@@ -180,8 +180,14 @@ int bootloaderMaster() {
   ISP isp;
   isp.isp_begin();
 
+  DigitalIn i2cUp1 = DigitalIn(D4);
+  DigitalIn i2cUp2 = DigitalIn(D5);
+
   I2C i2c(D4, D5);
   uint8_t i2cData[BootProto::kMaxPayloadLength];
+
+  i2cUp1.mode(PullUp);
+  i2cUp2.mode(PullUp);
 
   i2c.frequency(kI2CFrequency);
 
@@ -210,13 +216,13 @@ int bootloaderMaster() {
     i2c.write(thisDeviceAddress, (char*)i2cData, 1);
 
     numDevices += 1;
-
-    // TODO: account for more than 10 devices
-    usb_uart.putc(numDevices + '1');
-    ext_uart.putc(numDevices + '1');
-    usb_uart.puts(" devices in chain\r\n");
-    ext_uart.puts(" devices in chain\r\n");
   }
+
+  // TODO: account for more than 10 devices
+  usb_uart.putc(numDevices + '1');
+  ext_uart.putc(numDevices + '1');
+  usb_uart.puts(" devices in chain\r\n");
+  ext_uart.puts(" devices in chain\r\n");
 
   if (!masterRunAppPin) {
     for (size_t i=0; i<numDevices; i++) {
@@ -453,17 +459,24 @@ int bootloaderSlaveInit() {
 int main() {
   bootOutPin = 0;
 
-  usb_uart.baud(115200);
-  usb_uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ ")\r\n");
-  ext_uart.baud(115200);
-  ext_uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ ")\r\n");
-
   wait_ms(BootProto::kBootscanDelayMs);  // wait for some time to let boot in stabilize
 
+  usb_uart.baud(115200);
+  ext_uart.baud(115200);
+
+  // floating or high means master mode
   if (bootInPin == 1) {
-    wait_ms(BootProto::kBootscanDelayMs);
+    wait_ms(4*BootProto::kBootscanDelayMs);
+
+    usb_uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ "), master\r\n");
+    ext_uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ "), master\r\n");
+
     return bootloaderMaster();
   } else {
+
+	usb_uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ "), slave\r\n");
+	ext_uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ "), slave\r\n");
+
     return bootloaderSlaveInit();
   }
 }
