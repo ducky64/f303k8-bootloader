@@ -228,8 +228,7 @@ int bootloaderMaster() {
     for (size_t i=0; i<numDevices; i++) {
       BufferedPacketBuilder<BootProto::kMaxPayloadLength> i2cPacket;
       i2cPacket.put<uint8_t>(BootProto::kCmdRunApp);
-      // TODO: allow heterogeneous systems, use relative addressing
-      i2cPacket.put<uint32_t>((uint32_t)kAppBeginPtr);
+      i2cPacket.put<uint32_t>(0);
       i2c.write(BootProto::GetDeviceAddr(i),
           (char*)i2cPacket.getBuffer(), i2cPacket.getLength());
     }
