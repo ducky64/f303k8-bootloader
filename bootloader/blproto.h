@@ -52,9 +52,7 @@ namespace BootProto {
 
   // Given the device number (position in chain), return the mbed-style I2C
   // address.
-  uint8_t GetDeviceAddr(uint8_t device_num) {
-    return (device_num + 1) << 1;
-  }
+  uint8_t GetDeviceAddr(uint8_t device_num);
 }
 
 #endif

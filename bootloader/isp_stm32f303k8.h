@@ -60,24 +60,6 @@ public:
     return kWriteSize;
   }
 
-  ISPStatus erase(void* start_addr, size_t length) {
-    async_erase(start_addr, length);
-    ISPStatus status;
-    while (!get_last_async_status(&status)) {
-      async_update();
-    }
-    return status;
-  }
-
-  ISPStatus write(void* start_addr, void* data, size_t length) {
-    async_write(start_addr, data, length);
-    ISPStatus status;
-    while (!get_last_async_status(&status)) {
-      async_update();
-    }
-    return status;
-  }
-
   bool async_update() {
     if (async_op == OP_NONE) {
       return false;

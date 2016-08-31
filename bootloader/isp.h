@@ -60,7 +60,15 @@ public:
    *
    * Returns zero when successful, otherwise an error code.
    */
-  virtual ISPStatus erase(void* start_addr, size_t length) = 0;
+  ISPStatus erase(void* start_addr, size_t length) {
+    async_erase(start_addr, length);
+    ISPStatus status;
+    while (!get_last_async_status(&status)) {
+      async_update();
+    }
+    return status;
+  }
+
 
   /**
    * Writes the data to the specified start address.
@@ -69,7 +77,14 @@ public:
    *
    * Returns zero when successful, otherwise an error code.
    */
-  virtual ISPStatus write(void* start_addr, void* data, size_t length) = 0;
+  ISPStatus write(void* start_addr, void* data, size_t length) {
+    async_write(start_addr, data, length);
+    ISPStatus status;
+    while (!get_last_async_status(&status)) {
+      async_update();
+    }
+    return status;
+  }
 
   /**
    * During an async operation, this must be called periodically.
