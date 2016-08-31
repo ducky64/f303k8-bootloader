@@ -118,7 +118,8 @@ class BootloaderComms(object):
     while True:
       chunk = program_bin.read(CHUNK_SIZE)
       if chunk:
-        self.write(device, curr_address, chunk)
+        # Pad the chunk so it's a full block
+        self.write(device, curr_address, chunk + "\xff" * (CHUNK_SIZE - len(chunk)))
         curr_address += len(chunk)
         sys.stdout.write('\r' + pbar(curr_address, program_size))
         sys.stdout.flush()

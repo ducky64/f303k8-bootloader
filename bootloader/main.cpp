@@ -239,7 +239,6 @@ int bootloaderMaster() {
   statusLED.setIdlePolarity(true);
 
   Timer heartbeatTimer;
-  int nextHeartbeatTime = 0;
   heartbeatTimer.start();
 
   BufferedPacketReader<BootProto::kMaxPayloadLength> packet;
@@ -288,8 +287,8 @@ int bootloaderMaster() {
     }
 
     statusLED.update();
-    if (heartbeatTimer.read_ms() >= nextHeartbeatTime) {
-      nextHeartbeatTime += kHeartbeatPeriodMs;
+    if (heartbeatTimer.read_ms() >= (int)kHeartbeatPeriodMs) {
+        heartbeatTimer.reset();
       statusLED.pulse(kHeartbeatPulseTimeMs);
     }
   }
@@ -300,7 +299,6 @@ int bootloaderSlaveInit() {
   statusLED.setIdlePolarity(false);
 
   Timer heartbeatTimer;
-  int nextHeartbeatTime = 0;
   heartbeatTimer.start();
 
   // Wait for BOOT pin to go high
@@ -310,8 +308,8 @@ int bootloaderSlaveInit() {
     }
 
     statusLED.update();
-    if (heartbeatTimer.read_ms() >= nextHeartbeatTime) {
-      nextHeartbeatTime += kInitHeartbeatPeriodMs;
+    if (heartbeatTimer.read_ms() >= (int)kInitHeartbeatPeriodMs) {
+        heartbeatTimer.reset();
       statusLED.pulse(kHeartbeatPulseTimeMs);
     }
   }
@@ -353,8 +351,8 @@ int bootloaderSlaveInit() {
     }
 
     statusLED.update();
-    if (heartbeatTimer.read_ms() >= nextHeartbeatTime) {
-      nextHeartbeatTime += kInitHeartbeatPeriodMs;
+    if (heartbeatTimer.read_ms() >= (int)kInitHeartbeatPeriodMs) {
+      heartbeatTimer.reset();
       statusLED.pulse(kHeartbeatPulseTimeMs);
     }
   }
@@ -449,8 +447,8 @@ int bootloaderSlaveInit() {
     }
 
     statusLED.update();
-    if (heartbeatTimer.read_ms() >= nextHeartbeatTime) {
-      nextHeartbeatTime += kHeartbeatPeriodMs;
+    if (heartbeatTimer.read_ms() >= (int)kHeartbeatPeriodMs) {
+      heartbeatTimer.reset();
       statusLED.pulse(kHeartbeatPulseTimeMs);
     }
   }
@@ -466,7 +464,7 @@ int main() {
 
   // floating or high means master mode
   if (bootInPin == 1) {
-    wait_ms(4*BootProto::kBootscanDelayMs);
+    wait_ms(5*BootProto::kBootscanDelayMs);
 
     usb_uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ "), master\r\n");
     ext_uart.puts("\r\n\r\nBuilt " __DATE__ " " __TIME__ " (" __FILE__ "), master\r\n");
