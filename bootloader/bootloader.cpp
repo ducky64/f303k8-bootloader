@@ -16,6 +16,17 @@ static BootProto::RespStatus blstatus_from_ispstatus(ISPBase::ISPStatus status) 
 
 BootProto::RespStatus Bootloader::async_update() {
   if (current_command == BootProto::kCmdErase) {
+    isp.async_update();
+    ISPBase::ISPStatus status;
+    if (!isp.get_last_async_status(&status)) {
+      return BootProto::kRespBusy;
+    }
+    if (status != ISPBase::kISPOk) {
+      isp.isp_end();
+      current_command = BootProto::kCmdInvalid;
+      last_response = blstatus_from_ispstatus(status);
+    }
+
     if (current_stage == 0) {
       isp.isp_begin();
       if (current_start_addr < boot_vector + boot_vector_length
@@ -34,20 +45,7 @@ BootProto::RespStatus Bootloader::async_update() {
         isp.async_erase(current_start_addr, current_length);
         current_stage = 255;
       }
-    }
-
-    isp.async_update();
-    ISPBase::ISPStatus status;
-    if (!isp.get_last_async_status(&status)) {
-      return BootProto::kRespBusy;
-    }
-    if (status != ISPBase::kISPOk) {
-      isp.isp_end();
-      current_command = BootProto::kCmdInvalid;
-      last_response = blstatus_from_ispstatus(status);
-    }
-
-    if (current_stage == 1) {
+    } else if (current_stage == 1) {
       // Erase boot vector page
       isp.async_erase(boot_vector, isp.get_erase_size());
       current_stage = 2;
@@ -71,6 +69,16 @@ BootProto::RespStatus Bootloader::async_update() {
       last_response = BootProto::kRespUnknownError;
     }
   } else if (current_command == BootProto::kCmdWrite) {
+    isp.async_update();
+    ISPBase::ISPStatus status;
+    if (!isp.get_last_async_status(&status)) {
+      return BootProto::kRespBusy;
+    }
+    if (status != ISPBase::kISPOk) {
+      isp.isp_end();
+      current_command = BootProto::kCmdInvalid;
+      last_response = blstatus_from_ispstatus(status);
+    }
 
     if (current_stage == 0) {
       isp.isp_begin();
@@ -90,20 +98,7 @@ BootProto::RespStatus Bootloader::async_update() {
         isp.async_write(current_start_addr, current_data, current_length);
         current_stage = 255;
       }
-    }
-
-    isp.async_update();
-    ISPBase::ISPStatus status;
-    if (!isp.get_last_async_status(&status)) {
-      return BootProto::kRespBusy;
-    }
-    if (status != ISPBase::kISPOk) {
-      isp.isp_end();
-      current_command = BootProto::kCmdInvalid;
-      last_response = blstatus_from_ispstatus(status);
-    }
-
-    if (current_stage == 1) {
+    } else if (current_stage == 1) {
       // Write everything else
       isp.async_write(current_start_addr + boot_vector_length,
           current_data + boot_vector_length,

@@ -369,11 +369,10 @@ int bootloaderSlaveInit() {
 
   i2c.address(address);
 
-  ISP isp;
-  isp.isp_begin();
-
   BufferedPacketReader<BootProto::kMaxPayloadLength> i2cPacket;
-  // Override status. DONE means to read from ISP status.
+  // If anything other than kRespDone, this is a command parser status
+  // and takes priority over the actual bootloader status (which should be
+  // "not running").
   BootProto::RespStatus lastStatus = BootProto::kRespDone;
 
   // Main bootloader loop
@@ -382,7 +381,9 @@ int bootloaderSlaveInit() {
       NVIC_SystemReset();
     }
 
-    if (isp.async_update()) {
+    BootProto::RespStatus status = bootloader.async_update();
+
+    if (status == BootProto::kRespBusy) {
       statusLED.pulse(kActivityPulseTimeMs);
     }
 
@@ -391,16 +392,10 @@ int bootloaderSlaveInit() {
       statusLED.pulse(kActivityPulseTimeMs);
       if (lastCommand == BootProto::kCmdStatus) {
         if (lastStatus == BootProto::kRespDone) {
-          ISPBase::ISPStatus ispStatus;
-          if (isp.get_last_async_status(&ispStatus)) {
-            i2c.write(blstatus_from_ispstatus(ispStatus));
-          } else {
-            i2c.write(BootProto::kRespBusy);
-          }
+          i2c.write(status);
         } else {
           i2c.write(lastStatus);
         }
-
       } else {
         // Drop everything else
       }
@@ -417,7 +412,7 @@ int bootloaderSlaveInit() {
           uint32_t startAddr = i2cPacket.read<uint32_t>();
           uint32_t len = i2cPacket.read<uint32_t>();
 
-          isp.async_erase((void*)((size_t)kAppBeginPtr+(size_t)startAddr), len);
+          bootloader.async_erase(startAddr, len);
           lastStatus = BootProto::kRespDone;
         } else {
           lastStatus = BootProto::kRespInvalidFormat;
@@ -433,7 +428,7 @@ int bootloaderSlaveInit() {
             uint8_t* data = i2cPacket.read_buf(len);
             uint32_t computed_crc = CRC32::compute_crc(data, len);
             if (computed_crc == crc) {
-              isp.async_write((void*)((size_t)kAppBeginPtr+(size_t)startAddr), data, len);
+              bootloader.async_write(startAddr, data, len);
               lastStatus = BootProto::kRespDone;
             } else {
               lastStatus = BootProto::kRespInvalidChecksum;
@@ -447,7 +442,7 @@ int bootloaderSlaveInit() {
       } else if (lastCommand == BootProto::kCmdRunApp) {
         if (!i2c.read((char*)i2cPacket.ptrPutBytes(4), 4)) {
           uint32_t addr = i2cPacket.read<uint32_t>();
-          runApp((void*)((size_t)kAppBeginPtr+(size_t)addr));
+          bootloader.run_app(addr);
         }
       } else {
         // Drop everything else
