@@ -15,6 +15,7 @@
 
 #include "ActivityLED.h"
 #include "isp.h"
+#include "bootloader.h"
 
 RawSerial usb_uart(SERIAL_TX, SERIAL_RX);
 RawSerial ext_uart(D1, D0);
@@ -41,6 +42,11 @@ uint8_t* const kBootloaderDataEndPtr = (uint8_t*)&_BootloaderDataEnd;
 uint8_t* const kBootVectorPtr = (uint8_t*)&_BootVectorBegin;
 const size_t kBootVectorSize = (uint8_t*)&_BootVectorEnd - (uint8_t*)&_BootVectorBegin;
 uint8_t* const kBootloaderVectorPtr = (uint8_t*)&_BootloaderVector;
+
+ISP this_isp;
+Bootloader bootloader(this_isp, kAppBeginPtr, kAppEndPtr - kAppBeginPtr,
+    kBootloaderDataBeginPtr, kBootloaderDataEndPtr - kBootloaderDataBeginPtr,
+    kBootVectorPtr, kBootloaderVectorPtr, kBootVectorSize);
 
 /**
  * Runs an application at the specified address. Should not return under normal
@@ -103,7 +109,7 @@ BootProto::RespStatus get_slave_status(I2C &i2c, uint8_t device) {
   return resp;
 }
 
-BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, MemoryPacketReader& packet) {
+BootProto::RespStatus process_bootloader_command(I2C &i2c, MemoryPacketReader& packet) {
   BufferedPacketBuilder<BootProto::kMaxPayloadLength> i2cPacket;
   uint8_t opcode = packet.read<uint8_t>();
 
@@ -131,38 +137,13 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, MemoryP
 
       return get_slave_status(i2c, device);
     } else {
-      uint8_t* write_start_ptr = kAppBeginPtr + addr;
-      uint8_t* write_end_ptr = write_start_ptr + data_length;
-      if (write_start_ptr < kAppBeginPtr
-          || write_end_ptr > kAppEndPtr) {
-        return BootProto::kRespInvalidArgs;
-      }
-
       uint8_t* data = packet.read_buf(data_length);
       uint32_t computed_crc = CRC32::compute_crc(data, data_length);
       if (computed_crc != crc) {
         return BootProto::kRespInvalidChecksum;
       }
 
-      ISPBase::ISPStatus status;
-      if (write_start_ptr < kBootVectorPtr + kBootVectorSize
-          && write_end_ptr > kBootVectorPtr) {
-        // TODO: allow writes where the write start isn't the boot vector
-        if (write_start_ptr != kBootVectorPtr) {
-          return BootProto::kRespInvalidArgs;
-        }
-        // Redirect requests to overwrite the boot vector to the bootloader data segment
-        status = isp.write(kBootloaderDataBeginPtr, data, kBootVectorSize);
-        if (status != ISPBase::kISPOk) {
-          return blstatus_from_ispstatus(status);
-        }
-        status = isp.write(write_start_ptr + kBootVectorSize, data + kBootVectorSize, data_length - kBootVectorSize);
-
-      } else {
-        status = isp.write(write_start_ptr, data, data_length);
-      }
-
-      return blstatus_from_ispstatus(status);
+      return bootloader.write(addr, data, data_length);
 
     }
   } else if (opcode == 'E') {
@@ -184,40 +165,7 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, MemoryP
 
       return get_slave_status(i2c, device);
     } else {
-      uint8_t* erase_start_ptr = kAppBeginPtr+addr;
-      uint8_t* erase_end_ptr = erase_start_ptr + length;
-      if (erase_start_ptr < kAppBeginPtr
-          || erase_end_ptr > kAppEndPtr) {
-        return BootProto::kRespInvalidArgs;
-      }
-
-      ISPBase::ISPStatus status;
-      if (erase_start_ptr < kBootVectorPtr + kBootVectorSize
-          && erase_end_ptr > kBootVectorPtr) {
-        // TODO: allow erases where the write start isn't the boot vector
-        if (erase_start_ptr != kBootVectorPtr) {
-          return BootProto::kRespInvalidArgs;
-        }
-        // Redirect requests to overwrite the boot vector to the bootloader data segment
-        status = isp.erase(kBootloaderDataBeginPtr, kBootloaderDataEndPtr - kBootloaderDataBeginPtr);
-        if (status != ISPBase::kISPOk) {
-          return blstatus_from_ispstatus(status);
-        }
-        // Erase the boot vector page and immediately reprogram it
-        status = isp.erase(kBootVectorPtr, isp.get_erase_size());
-        if (status != ISPBase::kISPOk) {
-          return blstatus_from_ispstatus(status);
-        }
-        status = isp.write(kBootVectorPtr, kBootloaderVectorPtr, kBootVectorSize);
-        if (status != ISPBase::kISPOk) {
-          return blstatus_from_ispstatus(status);
-        }
-        status = isp.erase(erase_start_ptr + isp.get_erase_size(), length - isp.get_erase_size());
-      } else {
-        status = isp.erase(erase_start_ptr, length);
-      }
-
-      return blstatus_from_ispstatus(status);
+      return bootloader.erase(addr, length);
     }
   } else if (opcode == 'J') {
     uint8_t device = packet.read<uint8_t>();
@@ -233,18 +181,7 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, MemoryP
       i2c.write(BootProto::GetDeviceAddr(device),
           (char*)i2cPacket.getBuffer(), i2cPacket.getLength());
     } else {
-      isp.isp_end();
-      uint8_t* app_ptr = kAppBeginPtr + addr;
-      if (app_ptr < kBootVectorPtr + kBootVectorSize
-          && app_ptr >= kBootVectorPtr) {
-        // TODO: allow runs where the app ptr isn't the boot vector
-        if (app_ptr != kBootVectorPtr) {
-          return BootProto::kRespInvalidArgs;
-        }
-        runApp(kBootloaderDataBeginPtr, app_ptr);
-      } else {
-        runApp(app_ptr, app_ptr);
-      }
+      bootloader.run_app(addr);
     }
 
     return BootProto::kRespDone;
@@ -254,9 +191,6 @@ BootProto::RespStatus process_bootloader_command(ISPBase &isp, I2C &i2c, MemoryP
 }
 
 int bootloaderMaster() {
-  ISP isp;
-  isp.isp_begin();
-
   DigitalIn i2cUp1 = DigitalIn(D4);
   DigitalIn i2cUp2 = DigitalIn(D5);
 
@@ -332,7 +266,7 @@ int bootloaderMaster() {
       COBSDecoder::COBSResult result = decoder.decode(&rx, 1, &bytes_decoded);
 
       if (result == COBSDecoder::kResultDone) {
-        BootProto::RespStatus status = process_bootloader_command(isp, i2c, packet);
+        BootProto::RespStatus status = process_bootloader_command(i2c, packet);
         if (status == BootProto::kRespDone) {
           usb_uart.puts("D\n");
           ext_uart.puts("D\n");
@@ -513,7 +447,6 @@ int bootloaderSlaveInit() {
       } else if (lastCommand == BootProto::kCmdRunApp) {
         if (!i2c.read((char*)i2cPacket.ptrPutBytes(4), 4)) {
           uint32_t addr = i2cPacket.read<uint32_t>();
-          isp.isp_end();
           runApp((void*)((size_t)kAppBeginPtr+(size_t)addr));
         }
       } else {
