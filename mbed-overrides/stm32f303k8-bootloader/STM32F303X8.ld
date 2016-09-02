@@ -36,7 +36,7 @@ MEMORY
 ENTRY(Reset_Handler)
 
 _BootloaderData = 2K;
-_BootloaderSize = 16K;
+_BootloaderSize = 18K;
 
 SECTIONS
 {
