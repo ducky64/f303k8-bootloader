@@ -16,10 +16,10 @@ ERASE_SIZE = 2048
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%H:%M:%S', level=logging.INFO)
 
 parser = argparse.ArgumentParser(description='Bootloader host')
-parser.add_argument('bin_files', type=str, nargs='+',
-                    help='bin files to load')
 parser.add_argument('serial', type=str,
                     help='serial port to use, like COM1 (Windows) or /dev/ttyACM0 (Linux)')
+parser.add_argument('bin_files', type=str, nargs='+',
+                    help='bin files to load')
 parser.add_argument('--baud', type=int, default=115200,
                     help='serial baud rate')
 parser.add_argument('--devices', type=int, nargs='+',
